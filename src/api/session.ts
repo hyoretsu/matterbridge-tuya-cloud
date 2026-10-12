@@ -5,9 +5,9 @@ export class Session {
     expires_in: number;
   } {
     return (
-      typeof data.access_token === "string" &&
-      typeof data.refresh_token === "string" &&
-      typeof data.expires_in === "number"
+      typeof data.access_token === "string" && data.access_token.length > 0 &&
+      typeof data.refresh_token === "string" && data.refresh_token.length > 0 &&
+      typeof data.expires_in === "number" && Number.isFinite(data.expires_in) && data.expires_in > 0
     );
   }
 
@@ -65,7 +65,7 @@ export class Session {
   }
 
   public isTokenExpired(): boolean {
-    return this.expiresOn < Session.getCurrentEpoch();
+    return this.expiresOn <= Session.getCurrentEpoch();
   }
 
   public hasValidToken(): boolean {
@@ -73,6 +73,6 @@ export class Session {
   }
 
   private static getCurrentEpoch(): number {
-    return Math.round(new Date().getTime() / 1000);
+    return Math.floor(Date.now() / 1000);
   }
 }

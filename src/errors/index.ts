@@ -1,5 +1,5 @@
-export * from "./AuthenticationError";
-export * from "./RateLimitError";
-export * from "./UnsupportedOperationError";
+export * from "./AuthenticationError.js";
+export * from "./RateLimitError.js";
+export * from "./UnsupportedOperationError.js";
 
 export type ErrorCallback = (error: Error) => void;

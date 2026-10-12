@@ -1,11 +1,11 @@
-import { Logger } from "homebridge";
+export interface Logger { debug(message: string, ...args: unknown[]): void; warn(message: string, ...args: unknown[]): void; info(message: string, ...args: unknown[]): void; }
 import {
   AuthenticationError,
   RateLimitError,
   UnsupportedOperationError,
-} from "../errors";
+} from "../errors/index.js";
 import axios, { AxiosRequestConfig } from "axios";
-import { Session } from "./session";
+import { Session } from "./session.js";
 import {
   DeviceQueryPayload,
   DeviceState,
@@ -15,10 +15,10 @@ import {
   TuyaDevice,
   TuyaRequestHeader,
   TuyaResponseHeader,
-} from "./response";
-import { TuyaPlatform } from "./platform";
-import delay from "../helpers/delay";
-import { DeviceOfflineError } from "../errors/DeviceOfflineError";
+} from "./response.js";
+import { TuyaPlatform } from "./platform.js";
+
+import { DeviceOfflineError } from "../errors/DeviceOfflineError.js";
 import { URLSearchParams } from "url";
 
 // Requests to the Tuya Web API had no timeout, so on hosts where the request
@@ -29,6 +29,62 @@ const REQUEST_TIMEOUT_MS = 15000;
 
 export class TuyaWebApi {
   private session: Session | undefined;
+  private closed = false;
+  private refreshTimer?: ReturnType<typeof setTimeout>;
+  private requests = new Set<AbortController>();
+  private retryCount = 0;
+
+  public shutdown(): void {
+    this.closed = true;
+    clearTimeout(this.refreshTimer);
+    for (const request of this.requests) request.abort();
+    this.requests.clear();
+  }
+
+  private async request<T>(config: AxiosRequestConfig): Promise<{ data: T }> {
+    if (this.closed) throw new Error("Tuya client is shut down");
+    const controller = new AbortController();
+    this.requests.add(controller);
+    try {
+      const result = await this.transport<T>({ ...config, signal: controller.signal, timeout: REQUEST_TIMEOUT_MS });
+      if (this.closed) throw new Error("Tuya client is shut down");
+      return result;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 429) throw new RateLimitError("HTTP rate limit");
+      throw error;
+    } finally { this.requests.delete(controller); }
+  }
+
+  private wait(milliseconds: number): Promise<void> {
+    if (this.closed) return Promise.reject(new Error("Tuya client is shut down"));
+    const controller = new AbortController();
+    this.requests.add(controller);
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.requests.delete(controller);
+        resolve();
+      }, milliseconds);
+      controller.signal.addEventListener("abort", () => {
+        clearTimeout(timer);
+        this.requests.delete(controller);
+        reject(new Error("Tuya client is shut down"));
+      }, { once: true });
+    });
+  }
+
+  private scheduleRefresh(milliseconds: number): void {
+    clearTimeout(this.refreshTimer);
+    if (this.closed) return;
+    this.refreshTimer = setTimeout(() => {
+      void this.getOrRefreshToken().catch(error => {
+        if (this.closed) return;
+        this.log?.warn(`Token refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.retryCount++;
+        this.scheduleRefresh(Math.min(300_000, 5_000 * 2 ** Math.min(this.retryCount, 6)));
+      });
+    }, Math.max(1000, milliseconds));
+    this.refreshTimer.unref?.();
+  }
   private authBaseUrl = "https://px1.tuyaeu.com";
 
   constructor(
@@ -37,6 +93,7 @@ export class TuyaWebApi {
     private countryCode: string,
     private tuyaPlatform: TuyaPlatform = "tuya",
     private log?: Logger,
+    private transport: typeof axios = axios,
   ) {}
 
   public async getAllDeviceStates(): Promise<TuyaDevice[] | undefined> {
@@ -63,10 +120,14 @@ export class TuyaWebApi {
       "GET",
     );
 
-    if (data.header && data.header.code === "SUCCESS") {
+    if (data?.header && data.header.code === "SUCCESS") {
+      if (!Array.isArray(data.payload?.devices) || data.payload.devices.some(device =>
+        !device || typeof device.id !== "string" || !device.id || typeof device.name !== "string" || typeof device.dev_type !== "string" || !device.data || typeof device.data !== "object" || Array.isArray(device.data))) {
+        throw new Error("Malformed discovery response");
+      }
       return data.payload.devices;
     } else {
-      if (data.header && data.header.code === "FrequentlyInvoke") {
+      if (data?.header && data.header.code === "FrequentlyInvoke") {
         throw new RateLimitError("Requesting too quickly.", data.header.msg);
       } else {
         throw new Error(`No valid response from API: ${JSON.stringify(data)}`);
@@ -96,10 +157,11 @@ export class TuyaWebApi {
       "GET",
     );
 
-    if (data.header && data.header.code === "SUCCESS") {
+    if (data?.header && data.header.code === "SUCCESS") {
+      if (!data.payload?.data || typeof data.payload.data !== "object" || Array.isArray(data.payload.data)) throw new Error("Malformed query response");
       return data.payload.data;
     } else {
-      if (data.header && data.header.code === "FrequentlyInvoke") {
+      if (data?.header && data.header.code === "FrequentlyInvoke") {
         throw new RateLimitError("Requesting too quickly.", data.header.msg);
       } else {
         throw new Error(`No valid response from API: ${JSON.stringify(data)}`);
@@ -133,16 +195,16 @@ export class TuyaWebApi {
       "POST",
     );
 
-    if (data.header && data.header.code === "SUCCESS") {
+    if (data?.header && data.header.code === "SUCCESS") {
       return;
-    } else if (data.header && data.header.code === "FrequentlyInvoke") {
+    } else if (data?.header && data.header.code === "FrequentlyInvoke") {
       throw new RateLimitError("Requesting too quickly.", data.header.msg);
-    } else if (data.header && data.header.code === "UnsupportedOperation") {
+    } else if (data?.header && data.header.code === "UnsupportedOperation") {
       throw new UnsupportedOperationError(
         "Unsupported Operation",
         "The action you tried to perform is not valid for the current device. Please disable it.",
       );
-    } else if (data.header && data.header.code === "TargetOffline") {
+    } else if (data?.header && data.header.code === "TargetOffline") {
       throw new DeviceOfflineError();
     } else {
       throw new Error(`Invalid payload in response: ${JSON.stringify(data)}`);
@@ -175,7 +237,7 @@ export class TuyaWebApi {
       const contentLength = formData.length;
 
       data = (
-        await axios<Record<string, unknown> & { header: TuyaResponseHeader }>({
+        await this.request<Record<string, unknown> & { header: TuyaResponseHeader }>({
           headers: {
             "Content-Length": `${contentLength}`,
             "Content-Type": "application/x-www-form-urlencoded",
@@ -193,29 +255,22 @@ export class TuyaWebApi {
       data = (
         await this.sendRequest(
           "/homeassistant/access.do?grant_type=refresh_token&refresh_token=" +
-            this.session.refreshToken,
+            encodeURIComponent(this.session.refreshToken),
           {},
           "GET",
         )
       ).data;
     }
 
+    if (!data || typeof data !== "object") throw new AuthenticationError("Malformed authentication response");
     if (data.responseStatus === "error") {
-      if (typeof data.errorMsg === "string" && !retryingAfterError) {
-        // If we are requesting tokens too often we get an error: like "you cannot auth exceed once in 180 seconds"
-        const matches = /you cannot auth exceed once in (\d+) seconds/.exec(
-          data.errorMsg,
-        );
-
-        if (matches) {
-          const waitTime = parseInt(matches[1]) + 5;
-          this.log?.warn(`Cannot acquire token, waiting ${waitTime} seconds.`);
-          await delay(waitTime * 1000);
-          this.log?.info("Retrying authentication after previous error.");
-          return this.getOrRefreshToken(true);
-        }
+      const throttle = typeof data.errorMsg === "string" ? /you cannot auth exceed once in (\d+) seconds/.exec(data.errorMsg) : null;
+      if (throttle && !retryingAfterError) {
+        const seconds = Math.min(300, Number(throttle[1])) + 5;
+        this.log?.warn(`Cannot acquire token; retrying in ${seconds} seconds.`);
+        await this.wait(seconds * 1000);
+        return this.getOrRefreshToken(true);
       }
-
       throw new AuthenticationError(
         data.errorMsg?.toString() ?? JSON.stringify(data),
       );
@@ -223,7 +278,7 @@ export class TuyaWebApi {
 
     if (!Session.isValidSessionData(data)) {
       throw new AuthenticationError(
-        `Invalid session data: ${JSON.stringify(data)}`,
+        "Invalid session data",
       );
     }
 
@@ -242,12 +297,8 @@ export class TuyaWebApi {
       );
     }
 
-    setTimeout(
-      () => {
-        void this.getOrRefreshToken();
-      },
-      (data.expires_in - 60 * 60) * 1000,
-    );
+    this.retryCount = 0;
+    this.scheduleRefresh((data.expires_in > 3600 ? data.expires_in - 3600 : data.expires_in * 0.8) * 1000);
 
     return this.session;
   }
@@ -265,10 +316,10 @@ export class TuyaWebApi {
     this.log?.debug(
       "Sending HTTP %s request to %s - Header: %s.",
       method,
-      url,
+      url?.replace(/([?&]refresh_token=)[^&]*/g, "$1[redacted]"),
       JSON.stringify(data.header),
     );
-    const response = await axios({
+    const response = await this.request({
       baseURL: this.session?.areaBaseUrl,
       url,
       data,

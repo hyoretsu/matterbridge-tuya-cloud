@@ -1,5 +1,5 @@
-import { ClimateMode, ColorModes } from "../accessories/characteristics";
-import { TuyaDeviceDefaults } from "../config";
+import { ClimateMode, ColorModes } from "./modes.js";
+import { TuyaDeviceDefaults } from "../config.js";
 
 export type ExtendedBoolean = boolean | "true" | "false" | "True" | "False";
 
