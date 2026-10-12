@@ -1,0 +1,345 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string",
+      "default": "matterbridge-tuya",
+      "description": "Matterbridge plugin name."
+    },
+    "options": {
+      "title": "",
+      "type": "object",
+      "properties": {
+        "username": {
+          "title": "Username",
+          "type": "string"
+        },
+        "password": {
+          "title": "Password",
+          "type": "string"
+        },
+        "countryCode": {
+          "title": "Country Code",
+          "type": "string",
+          "description": "Your account country code, e.g. 1 for USA, 86 for China, 44 for UK."
+        },
+        "platform": {
+          "type": "string",
+          "enum": [
+            "tuya",
+            "smart_life",
+            "jinvoo_smart"
+          ],
+          "default": "tuya"
+        },
+        "pollingInterval": {
+          "title": "Polling Interval",
+          "type": "number",
+          "description": "Discovery interval in seconds; minimum 615. Configuration changes require restart.",
+          "minimum": 615,
+          "default": 615
+        },
+        "statePollingInterval": {
+          "type": "number",
+          "default": 65,
+          "anyOf": [
+            {
+              "const": 0
+            },
+            {
+              "minimum": 65
+            }
+          ],
+          "description": "State query interval in seconds; zero disables periodic queries."
+        }
+      },
+      "required": [
+        "username",
+        "password",
+        "countryCode"
+      ]
+    },
+    "defaults": {
+      "title": "Device Settings",
+      "description": "Here you can configure settings for each of your devices.",
+      "type": "array",
+      "items": {
+        "title": "Overwrite",
+        "type": "object",
+        "properties": {
+          "id": {
+            "title": "Device name or id",
+            "type": "string",
+            "description": "Can be found in your platform app (device info -> virtual ID) and is exposed during plugin boot (use the Tuya ID)",
+            "required": true
+          },
+          "device_type": {
+            "title": "Device type",
+            "type": "string",
+            "description": "The type that you want the device to be exposed as",
+            "oneOf": [
+              {
+                "title": "Dimmer",
+                "enum": [
+                  "dimmer"
+                ]
+              },
+              {
+                "title": "Fan",
+                "enum": [
+                  "fan"
+                ]
+              },
+              {
+                "title": "Garage Door",
+                "enum": [
+                  "garage"
+                ]
+              },
+              {
+                "title": "Light",
+                "enum": [
+                  "light"
+                ]
+              },
+              {
+                "title": "Outlet",
+                "enum": [
+                  "outlet"
+                ]
+              },
+              {
+                "title": "Scene",
+                "enum": [
+                  "scene"
+                ]
+              },
+              {
+                "title": "Switch",
+                "enum": [
+                  "switch"
+                ]
+              },
+              {
+                "title": "Temperature Sensor",
+                "enum": [
+                  "temperature_sensor"
+                ]
+              },
+              {
+                "title": "Thermostat",
+                "enum": [
+                  "climate"
+                ]
+              },
+              {
+                "title": "Window Cover",
+                "enum": [
+                  "cover"
+                ]
+              },
+              {
+                "title": "Window",
+                "enum": [
+                  "window"
+                ]
+              }
+            ],
+            "required": true
+          },
+          "min_temper": {
+            "title": "Minimal Temperature",
+            "type": [
+              "string",
+              "number"
+            ],
+            "pattern": "^-?\\d+(?:\\.[05])?$",
+            "description": "The minimal temperature that you want to be able to set in HomeKit, this must be in half degree celsius intervals.",
+            "placeholder": "0.0",
+            "required": false
+          },
+          "max_temper": {
+            "title": "Maximal Temperature",
+            "type": [
+              "string",
+              "number"
+            ],
+            "pattern": "^-?\\d+(?:\\.[05])?$",
+            "description": "The maximal temperature that you want to be able to set in HomeKit, this must be in half degree celsius intervals.",
+            "placeholder": "35.0",
+            "required": false
+          },
+          "min_brightness": {
+            "title": "Minimal Brightness",
+            "type": [
+              "string",
+              "number"
+            ],
+            "pattern": "^-?\\d+$",
+            "description": "The brightness value that Tuya returns when your light is off.",
+            "required": false
+          },
+          "max_brightness": {
+            "title": "Maximal Brightness",
+            "type": [
+              "string",
+              "number"
+            ],
+            "pattern": "^-?\\d+$",
+            "description": "The brightness value that Tuya returns when your light is at its brightest.",
+            "required": false
+          },
+          "min_kelvin": {
+            "title": "Minimal Kelvin",
+            "type": [
+              "string",
+              "number"
+            ],
+            "pattern": "^-?\\d+$",
+            "description": "The kelvin value that Tuya returns when your light is at its warmest (most red).",
+            "required": false
+          },
+          "max_kelvin": {
+            "title": "Maximal Kelvin",
+            "type": [
+              "string",
+              "number"
+            ],
+            "pattern": "^-?\\d+$",
+            "description": "The kelvin value that Tuya returns when your light is at its coolest (most blue).",
+            "required": false
+          },
+          "current_temperature_factor": {
+            "title": "Temperature Factor",
+            "type": [
+              "string",
+              "number"
+            ],
+            "pattern": "^\\d+(?:\\.\\d+)?$",
+            "description": "Alters the reported temperatures in HomeKit. I.e. if HomeKit reports 250 while the temperature is 250, enter `0.1` here to report the correct temperature. Defaults to 1, no change.",
+            "placeholder": "I.e. 0.1",
+            "required": false
+          },
+          "target_temperature_factor": {
+            "title": "Target Temperature Factor",
+            "type": [
+              "string",
+              "number"
+            ],
+            "pattern": "^\\d+(?:\\.\\d+)?$",
+            "description": "Alters the reported target temperatures in HomeKit. Defaults to 1, no change.",
+            "placeholder": "I.e. 0.1",
+            "required": false
+          },
+          "cover_characteristics": {
+            "title": "Features",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "title": "Feature",
+              "type": "string",
+              "enum": [
+                "Stop"
+              ]
+            }
+          },
+          "dimmer_characteristics": {
+            "title": "Features",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "title": "Feature",
+              "type": "string",
+              "enum": [
+                "Brightness"
+              ]
+            }
+          },
+          "fan_characteristics": {
+            "title": "Features",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "title": "Feature",
+              "type": "string",
+              "enum": [
+                "Speed"
+              ]
+            }
+          },
+          "light_characteristics": {
+            "title": "Features",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "title": "Feature",
+              "type": "string",
+              "enum": [
+                "Brightness",
+                "Color",
+                "Color Temperature"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "scenes": {
+      "title": "Expose scenes",
+      "default": false,
+      "description": "Scenes require plugin restart to enable.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "scenesWhitelist": {
+      "title": "Tuya scenes to expose to Matter",
+      "type": "array",
+      "items": {
+        "title": "Scene name or id",
+        "type": "string",
+        "required": true
+      }
+    },
+    "hiddenAccessories": {
+      "title": "Accessories to hide from Matter",
+      "type": "array",
+      "items": {
+        "title": "Accessory name or id",
+        "type": "string",
+        "required": true
+      }
+    },
+    "type": {
+      "type": "string",
+      "default": "DynamicPlatform"
+    },
+    "debug": {
+      "type": "boolean",
+      "default": false
+    },
+    "unregisterOnShutdown": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Matterbridge Tuya",
+  "required": [
+    "name",
+    "options"
+  ],
+  "description": "Tuya cloud plugin configuration. Changes require plugin restart."
+}

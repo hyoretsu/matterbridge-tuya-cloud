@@ -1,11 +1,7 @@
-import { API } from "homebridge";
+import type { PlatformConfig, PlatformMatterbridge } from "matterbridge";
+import type { AnsiLogger } from "matterbridge/logger";
+import { TuyaPlatform } from "./platform.js";
 
-import { PLATFORM_NAME, PLUGIN_NAME } from "./settings";
-import { TuyaWebPlatform } from "./platform";
-
-/**
- * This method registers the platform with Homebridge
- */
-export = (api: API) => {
-  api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, TuyaWebPlatform);
-};
+export default function createPlatform(host: PlatformMatterbridge, log: AnsiLogger, config: PlatformConfig): TuyaPlatform {
+  return new TuyaPlatform(host, log, config);
+}

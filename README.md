@@ -1,211 +1,110 @@
-<span style="text-align: center">
+# matterbridge-tuya
 
-# Tuya Web
+Matterbridge dynamic platform for Tuya / Smart Life devices through legacy Home Assistant Tuya Web API. Matterbridge-only; replaces original Homebridge plugin.
 
-[![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
+Requires **Matterbridge 3.10.13 or newer**. Plugin baseline Node 22.12+; selected Matterbridge host requires **22.13+** on Node 22 (or supported Node 24/26). Development commands use Bun.
 
-[![npm](https://img.shields.io/npm/v/@homebridge-plugins/homebridge-tuya-web/latest?label=latest)](https://www.npmjs.com/package/@homebridge-plugins/homebridge-tuya-web)
-[![npm](https://img.shields.io/npm/dt/@homebridge-plugins/homebridge-tuya-web)](https://www.npmjs.com/package/@homebridge-plugins/homebridge-tuya-web)
-[![GitHub release](https://img.shields.io/github/release/homebridge-plugins/homebridge-tuya-web.svg)](https://github.com/homebridge-plugins/homebridge-tuya-web/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## Install locally
 
-[![Homebridge Discord](https://img.shields.io/discord/432663330281226270?color=728ED5&logo=discord&label=discord)](https://discord.gg/hZubhrz)
-[![GitHub issues](https://img.shields.io/github/issues/homebridge-plugins/homebridge-tuya-web)](https://github.com/homebridge-plugins/homebridge-tuya-web/issues)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/homebridge-plugins/homebridge-tuya-web)](https://github.com/homebridge-plugins/homebridge-tuya-web/pulls)
+Build this checkout, then add its absolute directory through Matterbridge plugin manager. Host resolves `matterbridge` and Matter libraries; neither appears in plugin dependencies.
 
-</span>
-
-## Overview
-
-Hoobs and Homebridge plugin for Tuya devices using a cloud Tuya Web Api.
-
-This plugin is based on the Home Assistant Tuya integration that implements a special Tuya Home Assistant API.
-
-See [Home Assistant Tuya integration](https://www.home-assistant.io/components/tuya/) and [Tuyaha python library](https://github.com/PaulAnnekov/tuyaha).
-
-## Features
-
-This plugin implements the following features:
-
-- Controlling Tuya Wi-Fi enabled devices from within HomeKit enabled iOS Apps.
-- Uses simple and lightweight Cloud Web API to control and get state update from Tuya devices. You will need a stable internet connection to control the devices.
-- Device State Caching. State of devices is cached in memory, every time a HomeKit app request status updates from the devices this results in a very fast and responsive response. There can be a latency in updates when a device is controlled from an App/Hub/Controller other than HomeKit, e.g. from the Tuya Android/iOS App.
-
-## Installation
-
-```
-npm i -g @homebridge-plugins/homebridge-tuya-web
+```sh
+bun install --frozen-lockfile
+bun run sdk:link /absolute/path/to/installed/matterbridge
+bun run build
 ```
 
-## Support
+A separate development SDK can live under ignored `.sdk/`. Matterbridge 3.10.13 references both Matter 0.17.6 and 0.17.9 transitively; Bun must resolve a single Matter instance for endpoint/behavior constructors. Use `tools/sdk.package.json` as `.sdk/package.json` before installing:
 
-Please notice that there is no official support for this plugin.  
-If you have a question, please [start a discussion](https://github.com/homebridge-plugins/homebridge-tuya-web/discussions/new).  
-If you would like to report a bug, please [open an issue](https://github.com/homebridge-plugins/homebridge-tuya-web/issues/new/choose).
+```sh
+mkdir -p .sdk
+cp tools/sdk.package.json .sdk/package.json
+bun install --cwd .sdk --ignore-scripts
+bun run sdk:link
+```
 
-You can also get community help in the [Homebridge Discord Server](https://discord.gg/kqNCe2D) or on the [Homebridge Reddit](https://www.reddit.com/r/homebridge/).
+These install commands download packages. No live Tuya calls occur during build/tests; starting configured plugin authenticates against Tuya cloud.
 
-<span style="text-align: center">
+## Configure
 
-[![Homebridge Discord](https://discordapp.com/api/guilds/432663330281226270/widget.png?style=banner2)](https://discord.gg/kqNCe2D) [![Homebridge Reddit](https://raw.githubusercontent.com/homebridge/homebridge/master/.github/homebridge-reddit.svg?sanitize=true)](https://www.reddit.com/r/homebridge/)
-
-</span>
-
-# Configuration
-
-> :check: The preferred and always up-to-date way to configure this plugin is through the config UI.  
-> For details check [their documentation](https://github.com/oznu/homebridge-config-ui-x#readme).
+Matterbridge uses `matterbridge-tuya.config.json` and matching schema. Enter credentials under nested `options`; restart plugin after every configuration change.
 
 ```json
 {
-  "platform": "TuyaWebPlatform",
-  "name": "TuyaWebPlatform",
+  "name": "matterbridge-tuya",
+  "type": "DynamicPlatform",
+  "version": "1.1.6",
+  "debug": false,
+  "unregisterOnShutdown": false,
   "options": {
-    "username": "xxxx@gmail.com",
-    "password": "xxxxxxxxxx",
-    "countryCode": "xx",
-    "platform": "tuya"
-  }
+    "username": "you@example.com",
+    "password": "your-account-password",
+    "countryCode": "55",
+    "platform": "smart_life",
+    "pollingInterval": 615,
+    "statePollingInterval": 65
+  },
+  "defaults": [],
+  "hiddenAccessories": [],
+  "scenes": false,
+  "scenesWhitelist": []
 }
 ```
 
-The `options` has these properties:
+Supported platforms: `tuya`, `smart_life`, `jinvoo_smart`. Country code matches account registration. Existing API regional token routing retained.
 
-- `username` Required. The username for the account that is registered in the Android/iOS App. _Due to a bug in the API the `username` can't contain dots_.
-- `password` Required. The password for the account that is registered in the Android/iOS App.
-- `countryCode` Required. Your account [country code](https://www.countrycode.org/), e.g., 1 for the USA or 86 for China.
-- `platform` Optional. The App where you registered your account. `tuya` for Tuya Smart, `smart_life` for Smart Life, `jinvoo_smart` for Jinvoo Smart. Defaults to `tuya`. Also see _Platform_ section, below.
-- `pollingInterval` Optional. Defaults to empty, which entails no polling. The frequency in **seconds** that the plugin polls the cloud to get device updates. When you exclusively control the devices through the plugin, you can set this to a low frequency (high interval number, e.g. 1800 = 30 minutes).
+`pollingInterval` controls discovery, default/minimum 615 seconds. `statePollingInterval` controls sequential device queries, default/minimum 65 seconds; `0` disables periodic queries. Polling cycles never overlap. Rate limits defer further requests; temporary errors retain endpoints and attributes. Cloud discovery reconciles additions/removals only after valid successful response. Scene devices receive no periodic query.
 
-> :warning: Sign-in with Apple, Google, Facebook or any other provider is **not** supported and, due to limitations, will probably never be supported :warning:  
-> Please make sure your account is created using a plain old username and password combination.
+`hiddenAccessories` and `scenesWhitelist` accept device IDs or names. Scenes disabled by default; enable with `scenes: true`. Legacy `scenes: ["ID-or-name"]` whitelist also supported. Prefer IDs for durable configuration.
 
-All option outlines below are optional, they are useful to provide finer control on the working of the plugin.
-
-## Overruling Device Types
-
-It is possible to override values from the default. As of now, only overruling device types is possible. See example configuration below.
+Each `defaults` entry accepts `id` (ID/name), optional `device_type`, temperature limits/factors, brightness/Kelvin limits and feature lists. Factors multiply cloud temperature readings; outgoing target-temperature commands retain legacy Celsius payload. Empty feature list disables those features. Example:
 
 ```json
 {
-  "platform": "TuyaWebPlatform",
-  "name": "TuyaWebPlatform",
-  "options": {},
-  "defaults": [
-    {
-      "id": "<device name or id>",
-      "device_type": "<desired device type>"
-    }
-  ]
+  "defaults": [{
+    "id": "your-device-id",
+    "device_type": "light",
+    "light_characteristics": ["Brightness", "Color Temperature"],
+    "min_brightness": 10,
+    "max_brightness": 100,
+    "min_kelvin": 2000,
+    "max_kelvin": 6500
+  }]
 }
 ```
 
-The `defaults` has these properties:
+Feature lists: `dimmer_characteristics: ["Brightness"]`, `fan_characteristics: ["Speed"]`, `light_characteristics: ["Brightness", "Color", "Color Temperature"]`, `cover_characteristics: ["Stop"]`. Temperature settings: `min_temper`, `max_temper`, `current_temperature_factor`, `target_temperature_factor`.
 
-- `id` The name or ID for the device that is registered in the Android/iOS App. When matching on ID, please provide the `Tuya ID` as shown during plugin boot.
-- `device_type` The `device_type` to be overruled. This can be useful for dimmers that are reported as `light` by the Tuya API and don't support hue and saturation, or for outlets that are reported as `switch`.
+## Device presentation
 
-> Note: After overriding the device type, it might appear duplicated in both HomeBridge (Accessories Tab) and the Home App. To solve this issue, go to the Homebridge settings (top right corner) and remove the device using the `Remove Single Cached Accessory` option.
+| Tuya category | Matter endpoint |
+| --- | --- |
+| switch / outlet | On/Off Plug-in Unit (controllers commonly show outlet) |
+| dimmer | Dimmable Light |
+| light | On/Off, dimmable, color-temperature or extended-color light according to features |
+| temperature_sensor | Temperature Sensor |
+| fan | Fan, power and available speed |
+| climate | Thermostat, when required temperatures and mode capability exist |
+| cover / window | Window Covering, open/close and supported stop; no invented position |
+| scene | Momentary On/Off Plug-in Unit; On executes once then resets; Off has no cloud action |
+| garage | Unsupported with explicit diagnostic: legacy API lacks mandatory native Closure Control safety/error data |
 
-## Configure Devices
+SDK contains native closure support, but legacy Tuya response has no mandatory `currentErrorList` safety state. Garage exposure remains blocked; no Window Covering fallback. Likewise, climate devices missing required temperatures/mode, and dimmable/color lights missing required brightness capability, receive diagnostics rather than false feature claims. Continuous light/color movement and unsupported cover operations return Matter errors. Lowest Matter light level is 1; cloud zero values parse correctly and clamp to valid light range.
 
-Some devices allow for extra configuration.  
-The easiest option is to do this through [Homebridge Config UI X](https://github.com/oznu/homebridge-config-ui-x#homebridge-config-ui-x).  
-In the plugin settings, go to "Device Settings" and click on "Add Device Settings".  
-Add the device ID (or name) and select the device type.  
-If the given device type allows overwriting settings, the options will appear below.
+Endpoint IDs, serials and unique IDs derive from Tuya ID; renaming preserves identity. Tuya `online` drives reachability. Transient HTTP/auth errors do not imply offline. `unregisterOnShutdown` defaults false; true removes registered endpoints on shutdown.
 
-### Thermostat/Climate
+## Migrate from Homebridge
 
-These devices can have a minimum- and maximum temperature, as well as a temperature factor.
+Copy nested `options`, `defaults`, `hiddenAccessories`, `scenes` and `scenesWhitelist` to new configuration. Remove Homebridge `platform`, `accessory`, bridge and cached-accessory metadata; set Matterbridge `name`/`type` as above. Homebridge pairing records cannot migrate; pair Matterbridge through chosen Matter controller. Controller appearance and HomeKit-specific semantics may differ. Replace old discovery polling `0`/values below 615 with 615; disable device queries using new `statePollingInterval: 0`.
 
-The minimum and maximum values must be entered as degrees Celsius with half degree increments; i.e. `-16`, `5`, `23`, `32.5`.  
-This will influence the minimum and maximum temperature that you will be able to set the thermostat at in HomeKit.
+## Local validation
 
-The temperature factor can be used to influence the shown temperature. If HomeKit is showing an extremely high temperature, please try setting this value to `0.1`.
-This will change the shown value from i.e. `220` to `220 * 0.1 = 22`.
-The value entered here must be a positive decimal value i.e. `0.1`, `1`, `2.5`.
-
-If desired, you can overwrite these devices to the temperature sensor. This will only report the current temperature and not allow you to change the temperature.
-
-## Hiding devices
-
-There are some valid reasons why you might not want to expose certain devices to HomeKit. You might for example have another plugin active which also exposes certain Tuya devices, adding these devices to this list will prevent them from showing up multiple times.
-
-```json
-{
-  "platform": "TuyaWebPlatform",
-  "name": "TuyaWebPlatform",
-  "options": {},
-  "hiddenAccessories": ["<device name or id>"]
-}
+```sh
+bun run build
+bun run test
+bun run test:package
 ```
 
-## Whitelisting scenes
+Tests use mocked HTTP and simulated Matter networking with real endpoints; no live credentials, pairing or controller tests. Hardware validation remains outstanding for every category. Business behavior source: [docs/business-rules.md](docs/business-rules.md). Execution progress: [plans/0001-tuya-matterbridge-port.md](plans/0001-tuya-matterbridge-port.md).
 
-To prevent an overload of scenes clogging up your HomeKit devices, scenes are by default not exposed to HomeKit. When you wish to add Tuya scenes to homekit, you will need to add them to the whitelist.
-
-### Add all scenes to HomeKit
-
-You can add all your tuya scenes to HomeKit by setting the `scenes` key to `true`.
-
-```json
-{
-  "platform": "TuyaWebPlatform",
-  "name": "TuyaWebPlatform",
-  "options": {},
-  "scenes": true
-}
-```
-
-### Add specific scenes to HomeKit
-
-To add specific scenes to HomeKit, you can set the `scenes` key to true and set `scenesWhitelist` to an array in which you define either the names or IDs of the scenes that you'd wish to expose.
-
-```json
-{
-  "platform": "TuyaWebPlatform",
-  "name": "TuyaWebPlatform",
-  "options": {},
-  "scenes": true,
-  "scenesWhitelist": ["Scene-id", "Scene-name"]
-}
-```
-
-### Add no scenes to HomeKit
-
-To explicitly disable scene support, set the `scenes` key to `false`.
-
-# Supported Device Types
-
-There is currently support for the following device types within this plugin:
-
-- **Climate** - The plugin allows reading and setting the desired temperature for certain Tuya thermostats.
-- **Cover** - The plugin allows opening and closing window coverings. If preferred, the device type can be set to `garage` to expose the cover device as a garage door.
-- **Fan** - The platform supports most kinds of Tuya fans. This is partly implemented and only currently supports controlling the on/off state and speed control. The plugin lacks support for oscillation due to a Tuya limitation.
-- **Light/Dimmer** - The platform supports most types of Tuya lights. This is partly implemented and only currently supports controlling the on/off state and the brightness. This can be used with a dimmer.
-- **Scene** - Scenes support can be enabled in the config, this is disabled by default.
-- **Switch/Outlet** - The platform supports switch and outlets/sockets.
-
-# How to check whether the API this library uses can control your device?
-
-- Copy [this script](https://github.com/homebridge-plugins/homebridge-tuya-web/blob/latest/tools/debug_discovery.py) to your PC with Python
-  installed or to https://repl.it/
-- Set/update config inside and run it
-- Check if your devices are listed
-  - If they are - open an issue and provide the output
-  - If they are not - don't open an issue. Ask [Tuya support](mailto:support@tuya.com) to support your device in their
-    `/homeassistant` API
-- Remove the updated script, so your credentials won't leak
-
-# Determining platform for branded devices
-
-The Tuya cloud supports different branded platforms. If your devices came with a branded app, then it is likely that your username and password are not recognized by the Tuya platform. If the app that came with your devices is not for one of the supported platforms (_tuya_, _smart_life_ or _jinvoo_smart_) your best bet is to check which of the apps for the supported platforms recognizes your devices. Unregister your device from the branded app (so that they are "factory clean" again) and then try re-registering them in the app for one of the supported platforms.
-
-The device checking script above can help you to debug this.
-
-# Additional Resources
-
-If you need more assistance regarding Plugin installation, please have a look at the following external resources:
-
-- YouTube-Video: [Tuya Geräte über Homebridge-Web steuern - Einfach & Schnell ⏰](https://www.youtube.com/watch?v=6Jhon4lWmKc) (🇩🇪)
+Original Tuya Web client copyright and MIT license retained.

@@ -1,487 +1,199 @@
-import {
-  API,
-  Characteristic,
-  DynamicPlatformPlugin,
-  Logger,
-  PlatformAccessory,
-  Service,
-} from "homebridge";
-import { PLATFORM_NAME, PLUGIN_NAME, TUYA_DISCOVERY_TIMEOUT } from "./settings";
-import {
-  BaseAccessory,
-  ClimateAccessory,
-  CoverAccessory,
-  DimmerAccessory,
-  FanAccessory,
-  LightAccessory,
-  OutletAccessory,
-  SceneAccessory,
-  SwitchAccessory,
-} from "./accessories";
-import { TuyaDeviceDefaults, TuyaWebConfig } from "./config";
-import { AuthenticationError } from "./errors";
-import { DeviceList } from "./helpers/DeviceList";
-import { TuyaDevice, TuyaDeviceType, TuyaDeviceTypes } from "./api/response";
-import { TuyaWebApi } from "./api/service";
-import { TuyaPlatforms } from "./api/platform";
-import { GarageDoorAccessory } from "./accessories/GarageDoorAccessory";
-import { TemperatureSensorAccessory } from "./accessories/TemperatureSensorAccessory";
-import { Cache } from "./helpers/cache";
-import { WindowAccessory } from "./accessories/WindowAccessory";
+import { MatterbridgeDynamicPlatform, type PlatformConfig, type PlatformMatterbridge } from "matterbridge";
+import type { AnsiLogger } from "matterbridge/logger";
+import { TuyaWebApi } from "./api/service.js";
+import { DeviceController } from "./controller.js";
+import { applyDeviceConfiguration, validateConfig, type ValidatedConfig } from "./config.js";
+import { RateLimitError } from "./errors/index.js";
+import { buildDevice, deviceIdentity, type DeviceBinding } from "./devices/index.js";
+import { MIN_MATTERBRIDGE_VERSION } from "./settings.js";
 
-export type HomebridgeAccessory = PlatformAccessory<
-  Partial<{
-    cache: Cache;
-    deviceId: string;
-  }>
-> & {
-  controller?: BaseAccessory;
-};
+export type CloudClient = Pick<TuyaWebApi, "getOrRefreshToken" | "discoverDevices" | "getDeviceState" | "setDeviceState" | "shutdown">;
+interface RegisteredDevice {
+  controller: DeviceController;
+  binding: DeviceBinding;
+  unsubscribe: () => void;
+  updates: Promise<void>;
+  revision: number;
+}
 
-/**
- * HomebridgePlatform
- * This class is the main constructor for your plugin, this is where you should
- * parse the user config and discover/register accessories with Homebridge.
- */
-export class TuyaWebPlatform implements DynamicPlatformPlugin {
-  // ⚠️ Assigned in the constructor body, not here. These read from `this.api`,
-  // which is a constructor parameter property - and under the class field
-  // semantics that `target: ES2022` turns on, field initialisers run BEFORE
-  // parameter properties are bound, so `this.api` would still be undefined.
-  public readonly Service: typeof Service;
-  public readonly Characteristic: typeof Characteristic;
+export class TuyaPlatform extends MatterbridgeDynamicPlatform {
+  readonly devices = new Map<string, RegisteredDevice>();
+  private client?: CloudClient;
+  private settings?: ValidatedConfig;
+  private timer?: ReturnType<typeof setTimeout>;
+  private operation?: Promise<void>;
+  private running = false;
+  private configured = false;
+  private nextDiscovery = Infinity;
+  private nextState = Infinity;
+  private backoff = 65_000;
+  private shutdownTask?: Promise<void>;
 
-  // this is used to track restored cached accessories
-  public readonly accessories = new Map<string, HomebridgeAccessory>();
-
-  // Cloud polling interval in seconds
-  private readonly pollingInterval?: number;
-
-  public readonly tuyaWebApi!: TuyaWebApi;
-
-  private failedToInitAccessories = new Map<TuyaDeviceType, string[]>();
-
-  constructor(
-    public readonly log: Logger,
-    public readonly config: TuyaWebConfig,
-    public readonly api: API,
-  ) {
-    this.Service = this.api.hap.Service;
-    this.Characteristic = this.api.hap.Characteristic;
-
-    this.log.debug("Finished initializing platform:", this.config.name);
-
-    if (!config?.options) {
-      this.log.info(
-        "No options found in configuration file, disabling plugin.",
-      );
-      return;
-    }
-    const options = config.options;
-
-    if (
-      options.username === undefined ||
-      options.password === undefined ||
-      options.countryCode === undefined
-    ) {
-      this.log.error("Missing required config parameter.");
-      return;
-    }
-
-    if (
-      options.platform !== undefined &&
-      !TuyaPlatforms.includes(options.platform)
-    ) {
-      this.log.error(
-        "Invalid platform provided, received %s but must be one of %s",
-        options.platform,
-        TuyaPlatforms,
-      );
-    }
-
-    // Set cloud polling interval
-    this.pollingInterval = config.options.pollingInterval;
-
-    // Create Tuya Web API instance
-    this.tuyaWebApi = new TuyaWebApi(
-      options.username,
-      options.password,
-      options.countryCode,
-      options.platform,
-      this.log,
-    );
-
-    // When this event is fired it means Homebridge has restored all cached accessories from disk.
-    // Dynamic Platform plugins should only register new accessories after this event was fired,
-    // in order to ensure they weren't added to homebridge already. This event can also be used
-    // to start discovery of new accessories.
-    this.api.on("didFinishLaunching", () => {
-      void this.postLaunchSetup.bind(this)();
-    });
+  constructor(host: PlatformMatterbridge, log: AnsiLogger, config: PlatformConfig,
+    private readonly createClient: (config: ValidatedConfig) => CloudClient = settings => new TuyaWebApi(
+      settings.options.username, settings.options.password, settings.options.countryCode, settings.options.platform, log,
+    )) {
+    super(host, log, config);
+    if (!this.verifyMatterbridgeVersion(MIN_MATTERBRIDGE_VERSION)) throw new Error(`Matterbridge ${MIN_MATTERBRIDGE_VERSION}+ required`);
   }
 
-  private async postLaunchSetup(): Promise<void> {
+  override async onStart(): Promise<void> {
+    if (this.shutdownTask) throw new Error("A stopped platform must be recreated by the host before restarting");
+    if (this.running) return;
+    await this.ready;
+    this.settings = validateConfig(this.config);
+    this.client = this.createClient(this.settings);
+    this.running = true;
     try {
-      await this.tuyaWebApi.getOrRefreshToken();
-      // run the method to discover / register your devices as accessories
-      await this.discoverDevices();
-
-      if (this.pollingInterval) {
-        //Tuya will probably still complain if we fetch a new request on the exact second.
-        const pollingInterval = Math.max(
-          this.pollingInterval,
-          TUYA_DISCOVERY_TIMEOUT + 5,
-        );
-        this.log?.info(
-          "Enable cloud polling with interval %ss",
-          pollingInterval,
-        );
-        // Set interval for refreshing device states
-        setInterval(() => {
-          this.refreshDeviceStates().catch((e: unknown) => {
-            if (e instanceof Error) {
-              this.log.error(e.message);
-              if (e.stack) {
-                this.log.debug(e.stack);
-              }
-            }
-          });
-        }, pollingInterval * 1000);
-      }
-    } catch (e) {
-      if (e instanceof AuthenticationError) {
-        this.log.error("Authentication error: %s", e.message);
-        return;
-      }
-
-      if (e instanceof Error) {
-        this.log.error(e.message);
-        if (e.stack) {
-          this.log.debug(e.stack);
-        }
-        return;
-      }
-
-      this.log.error("Unknown error: %s", e);
+      await this.client.getOrRefreshToken();
+      if (this.running) await this.discoverDevices();
+    } catch (error) {
+      this.running = false;
+      this.client.shutdown();
+      throw error;
     }
   }
 
-  /**
-   * This function is invoked when homebridge restores cached accessories from disk at startup.
-   * It should be used to set up event handlers for characteristics and update respective values.
-   */
-  public configureAccessory(accessory: PlatformAccessory): void {
-    this.log.info("Loading accessory from cache:", accessory.displayName);
-
-    // add the restored accessory to the accessories cache, so we can track if it has already been registered
-    this.accessories.set(accessory.UUID, accessory);
+  override async onConfigure(): Promise<void> {
+    if (!this.running) return;
+    await super.onConfigure();
+    for (const entry of this.devices.values()) await entry.binding.update(entry.controller.state);
+    this.configured = true;
+    this.nextDiscovery = Date.now() + this.settings!.options.pollingInterval * 1000;
+    this.nextState = this.settings!.options.statePollingInterval === 0 ? Infinity : Date.now() + this.settings!.options.statePollingInterval * 1000;
+    this.schedule();
   }
 
-  public removeAccessory(accessory: PlatformAccessory): void {
-    this.log.info("Removing accessory:", accessory.displayName);
-    this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
-      accessory,
-    ]);
-
-    this.accessories.delete(accessory.UUID);
-  }
-
-  // Called from device classes
-  public registerPlatformAccessory(accessory: PlatformAccessory): void {
-    this.log.debug("Register Platform Accessory (%s)", accessory.displayName);
-    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
-      accessory,
-    ]);
-    this.accessories.set(accessory.UUID, accessory);
-  }
-
-  private async refreshDeviceStates(devices?: TuyaDevice[]): Promise<void> {
-    devices =
-      devices ??
-      this.filterDeviceList(await this.tuyaWebApi.getAllDeviceStates());
-    if (!devices) {
-      return;
-    }
-
-    // Refresh device states
-    for (const device of devices) {
-      const uuid = this.api.hap.uuid.generate(device.id);
-      const homebridgeAccessory = this.accessories.get(uuid);
-      if (homebridgeAccessory) {
-        homebridgeAccessory.controller?.updateAccessory(device);
-      } else if (
-        !this.failedToInitAccessories.get(device.dev_type)?.includes(uuid)
-      ) {
-        this.log.error(
-          "Could not find Homebridge device with UUID (%s) for Tuya device (%s)",
-          uuid,
-          device.name,
-        );
-      }
-    }
-  }
-
-  private addAccessory(device: TuyaDevice): void {
-    const deviceType: TuyaDeviceType = device.dev_type ?? "switch";
-    const uuid = this.api.hap.uuid.generate(device.id);
-    const homebridgeAccessory = this.accessories.get(uuid);
-
-    // Construct new accessory
-    switch (deviceType) {
-      case "cover":
-        new CoverAccessory(this, homebridgeAccessory, device);
-        break;
-      case "climate":
-        new ClimateAccessory(this, homebridgeAccessory, device);
-        break;
-      case "dimmer":
-        new DimmerAccessory(this, homebridgeAccessory, device);
-        break;
-      case "fan":
-        new FanAccessory(this, homebridgeAccessory, device);
-        break;
-      case "garage":
-        new GarageDoorAccessory(this, homebridgeAccessory, device);
-        break;
-      case "light":
-        new LightAccessory(this, homebridgeAccessory, device);
-        break;
-      case "outlet":
-        new OutletAccessory(this, homebridgeAccessory, device);
-        break;
-      case "scene":
-        new SceneAccessory(this, homebridgeAccessory, device);
-        break;
-      case "switch":
-        new SwitchAccessory(this, homebridgeAccessory, device);
-        break;
-      case "temperature_sensor":
-        new TemperatureSensorAccessory(this, homebridgeAccessory, device);
-        break;
-      case "window":
-        new WindowAccessory(this, homebridgeAccessory, device);
-        break;
-
-      default:
-        if (!this.failedToInitAccessories.get(deviceType)) {
-          this.log.warn(
-            "Could not init class for device type [%s]",
-            deviceType,
-          );
-          this.failedToInitAccessories.set(deviceType, []);
-        }
-        this.failedToInitAccessories.set(deviceType, [
-          uuid,
-          ...this.failedToInitAccessories.get(deviceType)!,
-        ]);
-        break;
-    }
-  }
-
-  private filterDeviceList(devices: TuyaDevice[] | undefined): TuyaDevice[] {
-    if (!devices) {
-      return [];
-    }
-    const allowedSceneIds = this.getAllowedSceneIds(devices);
-    const hiddenAccessoryIds = this.getHiddenAccessoryIds(devices);
-    return devices
-      .filter((d) => d.dev_type !== "scene" || allowedSceneIds.includes(d.id))
-      .filter((d) => !hiddenAccessoryIds.includes(d.id));
-  }
-
+  /** Discovery and queries share one nonoverlapping cycle. */
   async discoverDevices(): Promise<void> {
-    let devices = (await this.tuyaWebApi.discoverDevices()) ?? [];
-
-    // Is device type overruled in config defaults?
-    devices = this.applyConfigOverwrites(devices);
-    devices.forEach((device) => {
-      if (
-        device.config?.old_dev_type &&
-        device.config.old_dev_type.toLowerCase() !==
-          device.dev_type.toLowerCase()
-      ) {
-        this.log.info(
-          'Device type for "%s" is overruled in config from %s to: "%s"',
-          device.name,
-          device.config.old_dev_type,
-          device.dev_type,
-        );
+    if (!this.running || !this.client) return;
+    if (this.operation) return this.operation;
+    const revisions = new Map([...this.devices].map(([id, entry]) => [id, entry.revision]));
+    this.operation = (async () => {
+      const discovered = await this.client!.discoverDevices();
+      if (!this.running) return;
+      if (!Array.isArray(discovered)) throw new Error("Malformed Tuya discovery; retaining registered devices");
+      const devices = applyDeviceConfiguration(discovered, this.settings!);
+      const present = new Set(devices.map(device => device.id));
+      for (const [id, entry] of this.devices) {
+        if (present.has(id)) continue;
+        await this.unregisterDevice(entry.binding.endpoint);
+        this.release(entry);
+        this.devices.delete(id);
       }
-    });
-
-    devices = this.filterDeviceList(devices);
-
-    const cachedDeviceIds = [...this.accessories.keys()];
-    const availableDeviceIds = devices.map((d) => this.generateUUID(d.id));
-
-    for (const cachedDeviceId of cachedDeviceIds) {
-      if (!availableDeviceIds.includes(cachedDeviceId)) {
-        const device = this.accessories.get(cachedDeviceId)!;
-        this.log.warn(
-          "Device: %s - is no longer available and will be removed",
-          device.displayName,
-        );
-        this.removeAccessory(device);
+      for (const device of devices) {
+        if (!this.running) break;
+        const existing = this.devices.get(device.id);
+        if (existing) {
+          // An intervening command/query is newer than this discovery snapshot.
+          if (existing.revision === revisions.get(device.id)) existing.controller.update(device.data);
+          await existing.updates;
+          continue;
+        }
+        const controller = new DeviceController(device, this.client!);
+        let binding: DeviceBinding;
+        try {
+          const presentation = this.hasDeviceName(device.name) ? { ...device, name: `${device.name} (${deviceIdentity(device.id).slice(-8)})` } : device;
+          binding = buildDevice(controller, presentation);
+        }
+        catch (error) {
+          controller.dispose();
+          this.log.warn(`Unsupported Tuya ${device.dev_type} device ${device.id}: ${error instanceof Error ? error.message : String(error)}`);
+          continue;
+        }
+        const entry: RegisteredDevice = { controller, binding, updates: Promise.resolve(), revision: 0, unsubscribe: () => undefined };
+        try {
+          await this.registerDevice(binding.endpoint);
+          if (this.configured) await binding.update(controller.state);
+          entry.unsubscribe = controller.subscribe(state => {
+            entry.revision++;
+            entry.updates = entry.updates.then(() => binding.update(state)).catch(error => {
+              this.log.error(`Matter attribute update failed for ${device.id}: ${error instanceof Error ? error.message : String(error)}`);
+            });
+          });
+          this.devices.set(device.id, entry);
+        } catch (error) {
+          this.release(entry);
+          await binding.endpoint.close();
+          throw error;
+        }
       }
-    }
-
-    // loop over the discovered devices and register each one if it has not already been registered
-    for (const device of devices) {
-      this.addAccessory(device);
-    }
-
-    await this.refreshDeviceStates(devices);
+    })();
+    try { await this.operation; } finally { this.operation = undefined; }
   }
 
-  /**
-   * Returns a validated set of defaults and their devices for which the type will need to be overridden.
-   * @param devices
-   * @private
-   */
-  private applyConfigOverwrites(devices: TuyaDevice[]): TuyaDevice[] {
-    const configOverwriteData = this.config.defaults;
-
-    if (!configOverwriteData) {
-      return devices;
-    }
-
-    for (const configOverwrite of configOverwriteData as (Partial<TuyaDeviceDefaults> & {
-      old_dev_type: TuyaDeviceType;
-    })[]) {
-      if (!configOverwrite.id) {
-        this.log.warn(
-          "Missing required `id` property on device configuration, received:\r\n%s",
-          JSON.stringify(configOverwrite, undefined, 2),
-        );
-        continue;
+  async pollDeviceStates(): Promise<void> {
+    if (!this.running || this.operation) return;
+    this.operation = (async () => {
+      for (const [id, entry] of this.devices) {
+        if (!this.running) break;
+        if (entry.controller.device.dev_type === "scene") continue;
+        try { await entry.controller.query(); await entry.updates; }
+        catch (error) {
+          if (error instanceof RateLimitError) throw error;
+          if (this.running) this.log.warn(`Tuya query failed for ${id}; retaining state: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
-
-      if (!configOverwrite.device_type) {
-        this.log.warn(
-          "Missing required `device_type` property on device configuration, received:\r\n%s",
-          JSON.stringify(configOverwrite, undefined, 2),
-        );
-        continue;
-      }
-
-      configOverwrite.device_type =
-        configOverwrite.device_type.toLowerCase() as TuyaDeviceType;
-
-      const device = devices.find(
-        (device) =>
-          device.id === configOverwrite.id ||
-          device.name === configOverwrite.id,
-      );
-      if (!device) {
-        this.log.warn(
-          'Tried overwriting device config for: "%s" which is not a valid device-id or device-name.',
-          configOverwrite.id,
-        );
-        continue;
-      }
-
-      if (!TuyaDeviceTypes.includes(configOverwrite.device_type)) {
-        this.log.warn(
-          'Tried overwriting device config for: "%s" - device-type "%s" is not a valid device-type.',
-          device.name,
-          configOverwrite.device_type,
-        );
-        continue;
-      }
-
-      configOverwrite.old_dev_type = device.dev_type;
-      device.dev_type = configOverwrite.device_type;
-      delete configOverwrite.device_type;
-      delete configOverwrite.id;
-      device.config = configOverwrite;
-    }
-
-    return devices;
+    })();
+    try { await this.operation; } finally { this.operation = undefined; }
   }
 
-  /**
-   * Returns a list of all allowed scene Ids.
-   * @param devices
-   * @private
-   */
-  private getAllowedSceneIds(devices: TuyaDevice[]): string[] {
-    if (!this.config.scenes) {
-      return [];
-    }
+  private schedule(): void {
+    clearTimeout(this.timer);
+    if (!this.running || !this.configured) return;
+    this.timer = setTimeout(() => { void this.tick(); }, Math.max(1, Math.min(this.nextDiscovery, this.nextState) - Date.now()));
+    this.timer.unref();
+  }
 
-    const sceneList = new DeviceList(
-      devices.filter((d) => d.dev_type === "scene"),
-    );
-
-    if (
-      !Array.isArray(this.config.scenesWhitelist) ||
-      this.config.scenesWhitelist.length === 0
-    ) {
-      return sceneList.all;
-    }
-
-    const allowedSceneIds: string[] = [];
-
-    for (const toAllowSceneIdentifier of this.config
-      .scenesWhitelist as string[]) {
-      const deviceIdentifier = sceneList.find(toAllowSceneIdentifier);
-      if (deviceIdentifier) {
-        allowedSceneIds.push(deviceIdentifier);
-        continue;
+  private async tick(): Promise<void> {
+    try {
+      if (Date.now() >= this.nextDiscovery) {
+        this.nextDiscovery = Date.now() + this.settings!.options.pollingInterval * 1000;
+        await this.discoverDevices();
       }
-
-      this.log.warn(
-        "Tried allowing non-existing scene %s",
-        toAllowSceneIdentifier,
-      );
-    }
-
-    return [...new Set(allowedSceneIds)];
-  }
-
-  /**
-   * Returns a list of all devices that are not supposed to be exposed.
-   * @param devices
-   * @private
-   */
-  private getHiddenAccessoryIds(devices: TuyaDevice[]): string[] {
-    if (!this.config.hiddenAccessories) {
-      return [];
-    }
-
-    if (
-      !Array.isArray(this.config.hiddenAccessories) ||
-      this.config.hiddenAccessories.length === 0
-    ) {
-      return [];
-    }
-
-    const deviceList = new DeviceList(devices);
-
-    const hiddenAccessoryIdentifiers: string[] = [];
-
-    for (const toDisallowAccessoryIdentifier of this.config
-      .hiddenAccessories as string[]) {
-      const deviceIdentifier = deviceList.find(toDisallowAccessoryIdentifier);
-      if (deviceIdentifier) {
-        hiddenAccessoryIdentifiers.push(deviceIdentifier);
-        continue;
+      if (Date.now() >= this.nextState) {
+        this.nextState = Date.now() + this.settings!.options.statePollingInterval * 1000;
+        await this.pollDeviceStates();
       }
+      this.backoff = 65_000;
+    } catch (error) {
+      if (this.running) this.log.warn(`Tuya polling failed; retaining devices/state: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof RateLimitError) {
+        this.nextDiscovery = Math.max(this.nextDiscovery, Date.now() + this.backoff);
+        if (Number.isFinite(this.nextState)) this.nextState = Math.max(this.nextState, Date.now() + this.backoff);
+        this.backoff = Math.min(this.backoff * 2, 3_600_000);
+      }
+    } finally { this.schedule(); }
+  }
 
-      this.log.warn(
-        "Tried disallowing non-existing device %s",
-        toDisallowAccessoryIdentifier,
-      );
+  private release(entry: RegisteredDevice): void {
+    entry.unsubscribe();
+    entry.controller.dispose();
+    entry.binding.dispose();
+  }
+
+  override async onConfigChanged(): Promise<void> {
+    this.log.info("Tuya configuration changes require plugin restart.");
+    this.wssSendRestartRequired();
+  }
+
+  override onShutdown(reason?: string): Promise<void> {
+    return this.shutdownTask ??= this.shutdown(reason);
+  }
+
+  private async shutdown(reason?: string): Promise<void> {
+    this.running = false;
+    this.configured = false;
+    clearTimeout(this.timer);
+    this.client?.shutdown();
+    for (const entry of this.devices.values()) this.release(entry);
+    await this.operation?.catch(() => undefined);
+    await Promise.all([...this.devices.values()].map(entry => entry.updates));
+    try {
+      if (this.config.unregisterOnShutdown) await this.unregisterAllDevices();
+    } finally {
+      this.devices.clear();
+      await super.onShutdown(reason);
     }
-
-    return [...new Set(hiddenAccessoryIdentifiers)];
-  }
-
-  public get platformAccessory(): typeof PlatformAccessory {
-    return this.api.platformAccessory;
-  }
-
-  public get generateUUID(): (uuid: string) => string {
-    return this.api.hap.uuid.generate;
   }
 }

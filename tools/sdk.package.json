@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": { "matterbridge": "3.10.13" },
+  "overrides": {
+    "@matter/main": "0.17.9",
+    "@matter/general": "0.17.9",
+    "@matter/model": "0.17.9",
+    "@matter/node": "0.17.9",
+    "@matter/nodejs": "0.17.9",
+    "@matter/protocol": "0.17.9",
+    "@matter/types": "0.17.9"
+  }
+}

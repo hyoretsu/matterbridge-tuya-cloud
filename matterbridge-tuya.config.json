@@ -1,0 +1,18 @@
+{
+  "name": "matterbridge-tuya",
+  "type": "DynamicPlatform",
+  "debug": false,
+  "unregisterOnShutdown": false,
+  "options": {
+    "username": "",
+    "password": "",
+    "countryCode": "",
+    "platform": "tuya",
+    "pollingInterval": 615,
+    "statePollingInterval": 65
+  },
+  "defaults": [],
+  "hiddenAccessories": [],
+  "scenes": false,
+  "scenesWhitelist": []
+}

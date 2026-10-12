@@ -1,20 +1,30 @@
 {
   "compilerOptions": {
-    // Node 22 is the oldest version this plugin supports, per `engines`.
     "target": "ES2022",
-    "module": "commonjs",
-    // DOM is here for the fetch globals (Request, Response, Blob, FormData)
-    // that axios' own type definitions reference from 1.18 onwards, and ES2024
-    // for the iterator helper types that @types/node now uses. Without both,
-    // the build fails inside node_modules rather than in our own code.
-    "lib": ["ES2022", "ES2023", "ES2024", "DOM"],
+    "module": "NodeNext",
+    "lib": [
+      "ES2022",
+      "ES2023",
+      "ES2024",
+      "DOM"
+    ],
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/"],
-  "exclude": ["**/*.spec.ts"]
+  "include": [
+    "src/"
+  ],
+  "exclude": [
+    "**/*.test.ts"
+  ]
 }

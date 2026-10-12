@@ -1,4 +1,9 @@
 *
+!.gitignore
+!build.ts
+!check-package.ts
+!link-sdk.ts
+!sdk.package.json
 */
 !.gitignore
 !debug_discovery.py
