@@ -6,12 +6,12 @@ interface Logger { info(message:string): void; warn(message:string): void; }
 import {SharingApi} from './SharingApi.js';
 import {OpenApi} from './OpenApi.js';
 import {ModernCloudClient} from './CloudClient.js';
-// One log line per QR row, two full-block characters per module: half-block glyphs break under web log viewers' line spacing.
-// Light modules are drawn as blocks (and dark ones as no-break spaces, which HTML does not collapse) for dark log backgrounds.
+// One log line per QR row, one square emoji per module: the web log viewer uses a proportional font, so spaces and block glyphs
+// have different widths and misalign rows, while the black/white squares share the same width and keep the usual QR polarity.
 function renderQr(payload: string): string[] {
   const {size,data} = QRCode.create(payload,{errorCorrectionLevel:'L'}).modules;
   const quiet = 2;
-  const cell = (x: number,y: number) => x >= 0 && y >= 0 && x < size && y < size && data[y * size + x] ? '\u00a0\u00a0' : '\u2588\u2588';
+  const cell = (x: number,y: number) => x >= 0 && y >= 0 && x < size && y < size && data[y * size + x] ? '\u2b1b' : '\u2b1c';
   const lines: string[] = [];
   for (let y = -quiet; y < size + quiet; y++) {
     let line = '';
