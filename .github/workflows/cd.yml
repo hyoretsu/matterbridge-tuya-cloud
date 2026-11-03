@@ -25,12 +25,13 @@ jobs:
         if: github.event_name == 'push'
         run: |
           current=$(node -p "require('./package.json').version")
-          if git rev-parse -q --verify "refs/tags/v$current" >/dev/null; then
+          bumped=false
+          while git rev-parse -q --verify "refs/tags/v$current" >/dev/null; do
             npm version patch --no-git-tag-version >/dev/null
-            echo "bumped=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "bumped=false" >> "$GITHUB_OUTPUT"
-          fi
+            current=$(node -p "require('./package.json').version")
+            bumped=true
+          done
+          echo "bumped=$bumped" >> "$GITHUB_OUTPUT"
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - run: bun install --frozen-lockfile
       - run: mkdir -p .sdk && cp tools/sdk.package.json .sdk/package.json
