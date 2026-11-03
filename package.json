@@ -2,7 +2,7 @@
   "displayName": "Tuya Cloud",
   "name": "matterbridge-tuya-cloud",
   "version": "0.1.0",
-  "description": "Matterbridge Tuya cloud plugin with QR and developer authentication, smart plug control, metering and capability-based lights",
+  "description": "Matterbridge Tuya cloud plugin with QR and developer authentication",
   "main": "dist/src/index.js",
   "scripts": {
     "build": "bun tools/build.ts",
@@ -23,7 +23,7 @@
     "smartlife",
     "matter"
   ],
-  "author": "Milo Cesar <milocesar1@gmail.com>",
+  "author": "Aran Leite <hyoretsu@gmail.com>",
   "license": "MIT",
   "publishConfig": {
     "access": "public"

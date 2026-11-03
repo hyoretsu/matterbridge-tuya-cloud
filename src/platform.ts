@@ -41,7 +41,12 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
     if (this.shutdownTask) throw new Error("A stopped platform must be recreated by the host before restarting");
     if (this.running) return;
     await this.ready;
-    this.settings = validateConfig(this.config);
+    try {
+      this.settings = validateConfig(this.config);
+    } catch (error) {
+      this.log.error(`${error instanceof Error ? error.message : String(error)}. Configure the plugin and restart it.`);
+      return;
+    }
     this.client = this.createClient(this.settings);
     this.running = true;
     try {
