@@ -41,71 +41,73 @@
           "description": "State query interval in seconds; zero disables periodic queries."
         }
       },
-      "dependencies": {
-        "authMode": {
-          "oneOf": [
-            {
-              "properties": {
-                "authMode": {
-                  "const": "userCode"
-                },
-                "userCode": {
-                  "type": "string",
-                  "title": "User Code",
-                  "description": "Smart Life/Tuya Smart: Me → Settings → Account and Security → User Code. Restart, then scan QR from logs or saved SVG."
-                },
-                "sharingClientId": {
-                  "type": "string",
-                  "title": "Sharing client ID override",
-                  "description": "Optional; defaults to public Home Assistant device-sharing client ID. Requires Tuya service acceptance."
-                },
-                "sharingSchema": {
-                  "type": "string",
-                  "title": "Sharing authorization schema override"
-                }
-              },
-              "required": [
-                "userCode"
-              ]
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "authMode": {
+                "const": "developer"
+              }
             },
-            {
-              "properties": {
-                "authMode": {
-                  "const": "developer"
-                },
-                "region": {
-                  "type": "string",
-                  "enum": [
-                    "us",
-                    "usEast",
-                    "eu",
-                    "euWest",
-                    "cn",
-                    "in",
-                    "sg"
-                  ],
-                  "default": "us",
-                  "description": "Developer project data center; QR login uses returned regional endpoint."
-                },
-                "accessId": {
-                  "type": "string",
-                  "title": "Developer Access ID",
-                  "description": "Cloud project Access ID. Devices linked to this project are discovered."
-                },
-                "accessSecret": {
-                  "type": "string",
-                  "title": "Developer Access Secret",
-                  "format": "password"
-                }
+            "required": [
+              "authMode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "region": {
+                "type": "string",
+                "enum": [
+                  "us",
+                  "usEast",
+                  "eu",
+                  "euWest",
+                  "cn",
+                  "in",
+                  "sg"
+                ],
+                "default": "us",
+                "description": "Developer project data center; QR login uses returned regional endpoint."
               },
-              "required": [
-                "accessId",
-                "accessSecret"
-              ]
-            }
-          ]
+              "accessId": {
+                "type": "string",
+                "title": "Developer Access ID",
+                "description": "Cloud project Access ID. Devices linked to this project are discovered."
+              },
+              "accessSecret": {
+                "type": "string",
+                "title": "Developer Access Secret",
+                "format": "password"
+              }
+            },
+            "required": [
+              "accessId",
+              "accessSecret"
+            ]
+          },
+          "else": {
+            "properties": {
+              "userCode": {
+                "type": "string",
+                "title": "User Code",
+                "description": "Smart Life/Tuya Smart: Me → Settings → Account and Security → User Code. Restart, then scan QR from logs or saved SVG."
+              },
+              "sharingClientId": {
+                "type": "string",
+                "title": "Sharing client ID override",
+                "description": "Optional; defaults to public Home Assistant device-sharing client ID. Requires Tuya service acceptance."
+              },
+              "sharingSchema": {
+                "type": "string",
+                "title": "Sharing authorization schema override"
+              }
+            },
+            "required": [
+              "userCode"
+            ]
+          }
         }
-      }
+      ]
     },
     "hiddenAccessories": {
       "title": "Accessories to hide from Matter",
