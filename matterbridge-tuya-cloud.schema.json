@@ -1,0 +1,162 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string",
+      "default": "matterbridge-tuya-cloud",
+      "description": "Matterbridge plugin name."
+    },
+    "options": {
+      "type": "object",
+      "title": "Tuya Cloud",
+      "properties": {
+        "authMode": {
+          "type": "string",
+          "enum": [
+            "userCode",
+            "developer"
+          ],
+          "default": "userCode",
+          "description": "User Code scans a QR; developer mode requires a linked Tuya cloud project."
+        },
+        "userCode": {
+          "type": "string",
+          "title": "User Code",
+          "description": "Smart Life/Tuya Smart: Me → Settings → Account and Security → User Code. Restart, then scan QR from logs or saved SVG."
+        },
+        "region": {
+          "type": "string",
+          "enum": [
+            "us",
+            "usEast",
+            "eu",
+            "euWest",
+            "cn",
+            "in",
+            "sg"
+          ],
+          "default": "us",
+          "description": "Developer project data center; QR login uses returned regional endpoint."
+        },
+        "accessId": {
+          "type": "string",
+          "title": "Developer Access ID",
+          "description": "Cloud project Access ID. Devices linked to this project are discovered."
+        },
+        "accessSecret": {
+          "type": "string",
+          "title": "Developer Access Secret",
+          "format": "password"
+        },
+        "sharingClientId": {
+          "type": "string",
+          "title": "Sharing client ID override",
+          "description": "Optional; defaults to public Home Assistant device-sharing client ID. Requires Tuya service acceptance."
+        },
+        "sharingSchema": {
+          "type": "string",
+          "title": "Sharing authorization schema override"
+        },
+        "pollingInterval": {
+          "title": "Polling Interval",
+          "type": "number",
+          "description": "Discovery interval in seconds; minimum 615. Configuration changes require restart.",
+          "minimum": 615,
+          "default": 615
+        },
+        "statePollingInterval": {
+          "type": "number",
+          "default": 65,
+          "anyOf": [
+            {
+              "const": 0
+            },
+            {
+              "minimum": 65
+            }
+          ],
+          "description": "State query interval in seconds; zero disables periodic queries."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "authMode": {
+                "const": "developer"
+              }
+            },
+            "required": [
+              "authMode"
+            ]
+          },
+          "then": {
+            "required": [
+              "accessId",
+              "accessSecret"
+            ]
+          },
+          "else": {
+            "required": [
+              "userCode"
+            ]
+          }
+        }
+      ]
+    },
+    "hiddenAccessories": {
+      "title": "Accessories to hide from Matter",
+      "type": "array",
+      "items": {
+        "title": "Accessory name or id",
+        "type": "string",
+        "required": true
+      }
+    },
+    "type": {
+      "type": "string",
+      "default": "DynamicPlatform"
+    },
+    "debug": {
+      "type": "boolean",
+      "default": false
+    },
+    "unregisterOnShutdown": {
+      "type": "boolean",
+      "default": false
+    },
+    "energyCounters": {
+      "type": "array",
+      "title": "Verified cumulative energy counters",
+      "default": [],
+      "description": "Only configure a datapoint after confirming it reports cumulative energy, not increments. total_forward_energy is supported by default.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "code"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Tuya device ID"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+            "title": "Cumulative energy datapoint code"
+          }
+        }
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Matterbridge Tuya",
+  "required": [
+    "name",
+    "options"
+  ],
+  "description": "Tuya cloud plugin configuration. Changes require plugin restart."
+}

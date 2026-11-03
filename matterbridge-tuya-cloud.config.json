@@ -1,13 +1,12 @@
 {
-  "name": "matterbridge-tuya",
+  "name": "matterbridge-tuya-cloud",
   "type": "DynamicPlatform",
   "debug": false,
   "unregisterOnShutdown": false,
   "options": {
-    "username": "",
-    "password": "",
-    "countryCode": "",
-    "platform": "tuya",
+    "authMode": "userCode",
+    "userCode": "",
+    "region": "us",
     "pollingInterval": 615,
     "statePollingInterval": 65
   },

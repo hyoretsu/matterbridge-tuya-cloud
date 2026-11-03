@@ -1,13 +1,15 @@
 import { MatterbridgeDynamicPlatform, type PlatformConfig, type PlatformMatterbridge } from "matterbridge";
 import type { AnsiLogger } from "matterbridge/logger";
-import { TuyaWebApi } from "./api/service.js";
+import { createCloudClient } from "./cloud/create-client.js";
+import type { ModernCloudClient } from "./cloud/CloudClient.js";
+import { join } from "node:path";
 import { DeviceController } from "./controller.js";
 import { applyDeviceConfiguration, validateConfig, type ValidatedConfig } from "./config.js";
 import { RateLimitError } from "./errors/index.js";
 import { buildDevice, deviceIdentity, type DeviceBinding } from "./devices/index.js";
 import { MIN_MATTERBRIDGE_VERSION } from "./settings.js";
 
-export type CloudClient = Pick<TuyaWebApi, "getOrRefreshToken" | "discoverDevices" | "getDeviceState" | "setDeviceState" | "shutdown">;
+export type CloudClient = Pick<ModernCloudClient, "getOrRefreshToken" | "discoverDevices" | "getDeviceState" | "setDeviceState" | "shutdown">;
 interface RegisteredDevice {
   controller: DeviceController;
   binding: DeviceBinding;
@@ -30,9 +32,7 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
   private shutdownTask?: Promise<void>;
 
   constructor(host: PlatformMatterbridge, log: AnsiLogger, config: PlatformConfig,
-    private readonly createClient: (config: ValidatedConfig) => CloudClient = settings => new TuyaWebApi(
-      settings.options.username, settings.options.password, settings.options.countryCode, settings.options.platform, log,
-    )) {
+    private readonly createClient: (config: ValidatedConfig) => CloudClient = settings => createCloudClient(settings,join(host.matterbridgeDirectory,"matterbridge-tuya-cloud"),log)) {
     super(host, log, config);
     if (!this.verifyMatterbridgeVersion(MIN_MATTERBRIDGE_VERSION)) throw new Error(`Matterbridge ${MIN_MATTERBRIDGE_VERSION}+ required`);
   }

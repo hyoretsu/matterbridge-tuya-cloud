@@ -1,13 +1,14 @@
-# Tuya Matterbridge behavior
+# Tuya Cloud behavior
 
-- Tuya cloud device ID defines stable Matter identity. Name changes never change serial, endpoint ID or unique ID.
-- Scenes require explicit enablement. On runs once and resets false only after success; Off has no cloud effect.
-- Discovery defaults/minimum 615 seconds. Device queries default/minimum 65 seconds; zero disables queries. Queries run sequentially without overlapping polling cycles. Rate limits cause bounded backoff.
-- Only valid successful discovery can remove devices. Authentication, malformed responses and request failures retain endpoints/state. Reachability reflects explicit Tuya online status, never inferred from transient HTTP failure.
-- Cloud commands serialize with queries. Failed writes retain prior cached state and return Matter errors. Unsupported operations never return success.
-- Capability overrides and numerical limits/factors preserve legacy configuration. Invalid configuration fails before cloud authentication.
-- Covers expose movement and supported stop. No measured position exists in legacy response; do not synthesize percentages or completion.
-- Native Closure Control only for garage. Current legacy data lacks mandatory error/safety state, so garage receives unsupported-device diagnostic. Never map garage to Window Covering.
-- Thermostat requires current/target temperature and mode capability. Missing mandatory state/capabilities produces diagnostic.
-- Configuration changes require restart. Shutdown stops polling, cancels requests and timers, disposes controllers/listeners. Endpoints unregister only when `unregisterOnShutdown` is true.
-- All hardware/controller validation requires separate explicit authorization; local fixture acceptance does not imply hardware compatibility.
+- Default authentication is User Code + QR via device-sharing API; developer Access ID/Secret mode uses signed IoT Core v2. No password/legacy skill API fallback.
+- Current cloud adapter exposes plugs in cz/pc categories only; unsupported categories log diagnostics. Existing category mappings do not imply modern discovery coverage.
+- Only advertised writable Boolean switch/switch_N datapoints receive plug endpoints. Missing Boolean state fails discovery rather than inventing off.
+- Tuya ID defines stable primary identity; additional channels use datapoint suffixes. Names do not define identity.
+- Current, voltage, power and cumulative energy require recognized units and explicit scale metadata. Convert to mA/mV/mW/mWh, retain zeros, reject nonfinite/unsafe readings. No guessed units or incremental energy accumulation.
+- Device-wide metering belongs to primary switch/switch_1 channel only. Child lock, light mode, overcharge, power-on behavior and countdown are not mapped.
+- Sharing tokens persist with owner-only file permissions and account binding. Shutdown cancels requests/login waits. Renew tokens on demand with one concurrent auth operation; transient failures retain saved authorization.
+- Commands and queries serialize per endpoint. Failed writes preserve cached/Matter state and propagate errors. Unsupported operations never report success.
+- Discovery defaults/minimum 615 seconds; state polling defaults/minimum 65 seconds, zero disables. Poll cycles do not overlap. Rate limits back off.
+- Only complete, valid successful discovery reconciles removals. Auth/request/malformed errors retain devices and last known attributes. Reachability follows explicit cloud online status.
+- Configuration requires restart. Shutdown unregisters endpoints only when unregisterOnShutdown is true.
+- Modern light/IR/garage support and real-time subscriptions remain future work. All live cloud/device/controller validation requires separate explicit authorization.

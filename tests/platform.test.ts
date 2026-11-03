@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { setupTest, resetTest } from 'matterbridge/test-utils/buntest/setup';
 import { addMatterbridge, createTestEnvironment, createServerNode, destroyTestEnvironment, getMatterbridge, server, aggregator } from 'matterbridge/test-utils/buntest/matter';
 import { AnsiLogger } from 'matterbridge/logger';
-import { OnOff, BridgedDeviceBasicInformation, LevelControl, TemperatureMeasurement, ColorControl, FanControl, Thermostat, WindowCovering } from 'matterbridge/matter/clusters';
+import { OnOff, ElectricalPowerMeasurement, ElectricalEnergyMeasurement, BridgedDeviceBasicInformation, LevelControl, TemperatureMeasurement, ColorControl, FanControl, Thermostat, WindowCovering } from 'matterbridge/matter/clusters';
 import { OnOffServer, WindowCoveringServer, FanControlServer, ThermostatServer } from 'matterbridge/matter/behaviors';
 import { Network, NetworkSimulator } from "matterbridge/matter";
 import { TuyaPlatform, type CloudClient } from '../src/platform.js';
@@ -13,8 +13,8 @@ import { RateLimitError } from '../src/errors/index.js';
 import type { PlatformConfig } from 'matterbridge';
 
 const fixture = (type: TuyaDevice['dev_type'], data: TuyaDevice['data'], suffix = ''): TuyaDevice => ({id: `${type}${suffix}`, name: `${type}${suffix}`, dev_type: type, ha_type: 'switch', data: { online: true, ...data }});
-const fixtures = [fixture('switch', {state: false}), fixture('outlet', {state: false}), fixture('dimmer', {state: true, brightness: 10}), fixture('light', {state: true, brightness: 100, color_mode: 'colour', color_temp: 4000, color: {hue: '0', saturation: '0', brightness: '255'}}), fixture('temperature_sensor', {temperature: 0}), fixture('fan', {state: true, speed: 1, speed_level: 3}), fixture('climate', {state: true, current_temperature: 0, temperature: 20, mode: 'hot', min_temper: 0, max_temper: 40}), fixture('cover', {state: CoverState.Stopped, support_stop: true}), fixture('window', {state: CoverState.Opening, support_stop: false}), fixture('scene', {state: false}), fixture('garage', {state: CoverState.Stopped})];
-const config: PlatformConfig = {name: 'matterbridge-tuya', type: 'DynamicPlatform', version: '1.1.6', debug: false, unregisterOnShutdown: true, scenes: true, options: {username: 'fixture',password: 'fixture',countryCode: '55',statePollingInterval: 0}};
+const fixtures = [fixture('switch', {state: false}), fixture('outlet', {state:false,currentMa:788,voltageMv:210000,powerMw:113000,energyMwh:60000}), fixture('dimmer', {state: true, brightness: 10}), fixture('light', {state: true, brightness: 100, color_mode: 'colour', color_temp: 4000, color: {hue: '0', saturation: '0', brightness: '255'}}), fixture('temperature_sensor', {temperature: 0}), fixture('fan', {state: true, speed: 1, speed_level: 3}), fixture('climate', {state: true, current_temperature: 0, temperature: 20, mode: 'hot', min_temper: 0, max_temper: 40}), fixture('cover', {state: CoverState.Stopped, support_stop: true}), fixture('window', {state: CoverState.Opening, support_stop: false}), fixture('scene', {state: false}), fixture('garage', {state: CoverState.Stopped})];
+const config: PlatformConfig = {name: 'matterbridge-tuya-cloud', type: 'DynamicPlatform', version: '0.1.0', debug: false, unregisterOnShutdown: true, scenes: true, options: {userCode:'fixture',statePollingInterval: 0}};
 let platform: TuyaPlatform;
 let currentDevices = fixtures;
 let discoveryFailure: Error | undefined;
@@ -73,6 +73,22 @@ describe('real Matter endpoints', () => {
     expect(attributes('light', ColorControl)?.currentHue).toBe(0);
     expect(attributes('fan', FanControl)?.percentCurrent).toBe(33);
     expect(attributes('cover', WindowCovering)?.currentPositionLiftPercent100ths ?? null).toBeNull();
+  });
+  test('plug metering registers standard clusters and updates zero values', async()=>{
+    const binding=platform.devices.get('outlet')!.binding;
+    const endpoint=binding.endpoint;
+    expect(endpoint.state.electricalPowerMeasurement.activeCurrent).toBe(788);
+    expect(endpoint.state.electricalPowerMeasurement.voltage).toBe(210000);
+    expect(endpoint.state.electricalPowerMeasurement.activePower).toBe(113000);
+    expect(endpoint.state.electricalEnergyMeasurement.cumulativeEnergyImported?.energy).toBe(60000);
+    expect(endpoint.hasClusterServer(ElectricalPowerMeasurement.id)).toBe(true);
+    expect(endpoint.hasClusterServer(ElectricalEnergyMeasurement.id)).toBe(true);
+    await binding.update({currentMa:0,voltageMv:0,powerMw:0,energyMwh:0});
+    expect(endpoint.state.electricalPowerMeasurement.activeCurrent).toBe(0);
+    expect(endpoint.state.electricalPowerMeasurement.voltage).toBe(0);
+    expect(endpoint.state.electricalPowerMeasurement.activePower).toBe(0);
+    expect(endpoint.state.electricalEnergyMeasurement.cumulativeEnergyImported?.energy).toBe(0);
+    expect(platform.devices.get('switch')!.binding.endpoint.hasClusterServer(ElectricalPowerMeasurement.id)).toBe(false);
   });
   test('real On/Off commands produce payloads; cloud failures preserve controller and Matter state', async () => {
     const entry = platform.devices.get('switch')!;

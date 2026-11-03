@@ -4,6 +4,10 @@ import { TuyaDeviceDefaults } from "../config.js";
 export type ExtendedBoolean = boolean | "true" | "false" | "True" | "False";
 
 type TuyaProperties = Partial<{
+  currentMa: number;
+  voltageMv: number;
+  powerMw: number;
+  energyMwh: number;
   brightness: number | string;
   color: Partial<{ hue: string; saturation: string; brightness: string }>;
   color_mode: ColorModes;

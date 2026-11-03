@@ -1,0 +1,7 @@
+Tuya cloud interoperability references
+
+Tuya device-sharing SDK: https://github.com/tuya/tuya-device-sharing-sdk
+Copyright Tuya. Licensed under Apache License 2.0.
+https://github.com/tuya/tuya-device-sharing-sdk/blob/main/LICENSE
+
+The device-sharing encryption/signature protocol and public authorization identifiers are implemented for interoperability. This plugin is independent and is not endorsed by Tuya or Home Assistant.

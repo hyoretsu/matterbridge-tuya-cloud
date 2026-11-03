@@ -4,7 +4,23 @@ All notable changes to this project will be documented in this file. This projec
 
 Releases before v1.1.5 predate this file — see the [GitHub releases](https://github.com/homebridge-plugins/homebridge-tuya-web/releases) for that history.
 
-## v1.1.7 (Pending Release)
+## v0.1.0 (Pending Release)
+
+Initial experimental release under the new package name. Version 1.0.0 is reserved for completed feature coverage.
+
+### Breaking changes
+
+- Rename package to matterbridge-tuya-cloud; replace Homebridge host with Matterbridge 3.10.13+ (Node 22.13+).
+- Replace legacy username/password cloud API with User Code + QR (default) or developer Access ID/Secret authentication.
+- Modern cloud discovery initially supports plugs (cz/pc) only; other categories emit diagnostics.
+
+### Added
+
+- Writable plug channels with stable Tuya-derived identity, success-only state commits, serialized polling/commands and shutdown cancellation.
+- Metadata-scaled current, voltage, power and energy through standard Matter electrical clusters; preserve zero and omit unknown units.
+- QR session persistence and refresh, signed IoT Core v2 project/model/shadow APIs, mocked transport and real endpoint tests.
+
+## v1.1.7 (Historical unreleased changes)
 
 ### Changed
 

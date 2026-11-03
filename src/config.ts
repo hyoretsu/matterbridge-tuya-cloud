@@ -1,4 +1,4 @@
-import { TuyaPlatforms, type TuyaPlatform } from "./api/platform.js";
+import { REGIONS } from "./cloud/OpenApi.js";
 import { TuyaDeviceTypes, type TuyaDevice, type TuyaDeviceType } from "./api/response.js";
 
 export interface TuyaDeviceDefaults {
@@ -25,25 +25,34 @@ export interface TuyaWebConfig {
   debug?: boolean;
   unregisterOnShutdown?: boolean;
   options?: {
-    username?: string;
-    password?: string;
-    countryCode?: string;
-    platform?: TuyaPlatform;
+    authMode?: 'userCode' | 'developer';
+    userCode?: string;
+    sharingClientId?: string;
+    sharingSchema?: string;
+    accessId?: string;
+    accessSecret?: string;
+    userId?: string;
+    region?: keyof typeof REGIONS;
     pollingInterval?: number;
     statePollingInterval?: number;
   };
   defaults?: Partial<TuyaDeviceDefaults>[];
   hiddenAccessories?: string[];
+  energyCounters?: {id: string; code: string}[];
   scenes?: boolean | string[];
   scenesWhitelist?: string[];
 }
 export type TuyaConfig = TuyaWebConfig;
 export interface ValidatedConfig extends TuyaWebConfig {
   options: {
-    username: string;
-    password: string;
-    countryCode: string;
-    platform: TuyaPlatform;
+    sharingClientId?: string;
+    sharingSchema?: string;
+    authMode: 'userCode' | 'developer';
+    userCode: string;
+    accessId: string;
+    accessSecret: string;
+    userId: string;
+    region: keyof typeof REGIONS;
     pollingInterval: number;
     statePollingInterval: number;
   };
@@ -51,13 +60,14 @@ export interface ValidatedConfig extends TuyaWebConfig {
 
 export function validateConfig(config: TuyaWebConfig): ValidatedConfig {
   const options = config.options ?? {};
-  for (const key of ["username", "password", "countryCode"] as const) {
-    if (typeof options[key] !== "string" || !options[key]!.trim()) {
-      throw new Error(`Missing Tuya options.${key}`);
-    }
+  const authMode = options.authMode ?? 'userCode';
+  if (authMode !== 'userCode' && authMode !== 'developer') throw new Error('Invalid options.authMode');
+  for (const key of authMode === 'userCode' ? ['userCode'] as const : ['accessId','accessSecret'] as const) {
+    if (typeof options[key] !== 'string' || !options[key]!.trim()) throw new Error('Missing Tuya options.' + key);
   }
-  const platform = options.platform ?? "tuya";
-  if (!TuyaPlatforms.includes(platform)) throw new Error("Invalid Tuya options.platform");
+  const region = options.region ?? 'us';
+  if (!(region in REGIONS)) throw new Error('Invalid options.region');
+  for (const key of ['sharingClientId','sharingSchema'] as const) if (options[key] !== undefined && (typeof options[key] !== 'string' || !options[key]!.trim())) throw new Error('Invalid options.' + key);
   const pollingInterval = options.pollingInterval ?? 615;
   const statePollingInterval = options.statePollingInterval ?? 65;
   if (!Number.isFinite(pollingInterval) || pollingInterval < 615) {
@@ -91,8 +101,9 @@ export function validateConfig(config: TuyaWebConfig): ValidatedConfig {
       if (values !== undefined && (!Array.isArray(values) || values.some(value => !(allowed as readonly string[]).includes(value)))) throw new Error(`Invalid ${key} for ${override.id}`);
     }
   }
+  if (config.energyCounters !== undefined && (!Array.isArray(config.energyCounters) || config.energyCounters.some(item => !item || typeof item.id !== 'string' || !item.id.trim() || typeof item.code !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(item.code)))) throw new Error('energyCounters requires device id and verified cumulative datapoint code');
   if (config.unregisterOnShutdown !== undefined && typeof config.unregisterOnShutdown !== "boolean") throw new Error("unregisterOnShutdown must be boolean");
-  return { ...structuredClone(config), scenes: config.scenes ?? false, options: { ...options, username: options.username!, password: options.password!, countryCode: options.countryCode!, platform, pollingInterval, statePollingInterval } };
+  return { ...structuredClone(config), scenes: config.scenes ?? false, options: { ...options, authMode, userCode: options.userCode ?? "", accessId: options.accessId ?? "", accessSecret: options.accessSecret ?? "", userId: options.userId ?? "", region, pollingInterval, statePollingInterval } };
 }
 
 /** Clone cloud data before applying settings, so retries never mutate discovery or configuration. */

@@ -1,5 +1,5 @@
 import type { DeviceState, TuyaApiMethod, TuyaApiPayload, TuyaDevice } from './api/response.js';
-import type { TuyaWebApi } from './api/service.js';
+import type { ModernCloudClient } from './cloud/CloudClient.js';
 
 /** Serializes commands and queries so late cloud responses cannot overwrite successful writes. */
 export class DeviceController {
@@ -8,7 +8,7 @@ export class DeviceController {
   private disposed = false;
   private listeners = new Set<(state: DeviceState) => void>();
 
-  constructor(public readonly device: TuyaDevice, private readonly api: Pick<TuyaWebApi, 'setDeviceState' | 'getDeviceState'>) {
+  constructor(public readonly device: TuyaDevice, private readonly api: Pick<ModernCloudClient, 'setDeviceState' | 'getDeviceState'>) {
     this.current = structuredClone(device.data);
   }
 

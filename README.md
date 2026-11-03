@@ -1,20 +1,25 @@
-# matterbridge-tuya
+# matterbridge-tuya-cloud
 
-Matterbridge dynamic platform for Tuya / Smart Life devices through legacy Home Assistant Tuya Web API. Matterbridge-only; replaces original Homebridge plugin.
+Version 0.x tracks incomplete feature development; 1.0.0 is reserved for completed feature coverage.
 
-Requires **Matterbridge 3.10.13 or newer**. Plugin baseline Node 22.12+; selected Matterbridge host requires **22.13+** on Node 22 (or supported Node 24/26). Development commands use Bun.
+Experimental Matterbridge plugin for Tuya / Smart Life cloud devices. Current cloud discovery targets smart plugs (Tuya categories cz and pc), with on/off and available electrical readings. This is not a complete LocalTuya replacement: modern light/IR mappings and plug configuration controls are not implemented.
 
-## Install locally
+Requires Matterbridge 3.10.13+ and a host-supported Node version (Node 22.13+ baseline). Development and release commands use Bun. The package contains no Matterbridge or @matter dependencies; the host provides them.
 
-Build this checkout, then add its absolute directory through Matterbridge plugin manager. Host resolves `matterbridge` and Matter libraries; neither appears in plugin dependencies.
+## Install
+
+Once published, install **matterbridge-tuya-cloud** through Matterbridge's plugin manager. Version 0.1.0 is prepared locally; this README does not imply it is already available on npm.
+
+For a local checkout:
 
 ```sh
 bun install --frozen-lockfile
-bun run sdk:link /absolute/path/to/installed/matterbridge
+bun run sdk:link /absolute/path/to/matterbridge
 bun run build
+matterbridge --add /absolute/path/to/this/checkout
 ```
 
-A separate development SDK can live under ignored `.sdk/`. Matterbridge 3.10.13 references both Matter 0.17.6 and 0.17.9 transitively; Bun must resolve a single Matter instance for endpoint/behavior constructors. Use `tools/sdk.package.json` as `.sdk/package.json` before installing:
+The development link helper currently checks exactly Matterbridge 3.10.13. Its transitive Matter libraries require a single compatible instance. To provision the recorded development SDK:
 
 ```sh
 mkdir -p .sdk
@@ -23,81 +28,78 @@ bun install --cwd .sdk --ignore-scripts
 bun run sdk:link
 ```
 
-These install commands download packages. No live Tuya calls occur during build/tests; starting configured plugin authenticates against Tuya cloud.
+Docker/add-on installations must keep plugin files and runtime dependencies inside persistent storage accessible from the container. Register the container path. Pair Matterbridge with Home Assistant's Matter integration if it is not already paired; preserve bridge storage and pairing across updates.
 
-## Configure
+## User Code authorization (default)
 
-Matterbridge uses `matterbridge-tuya.config.json` and matching schema. Enter credentials under nested `options`; restart plugin after every configuration change.
+1. In Smart Life or Tuya Smart, open Me → Settings → Account and Security and copy User Code.
+2. Configure options.userCode in Matterbridge, then restart plugin.
+3. Scan authorization QR with the app's scanner within three minutes. QR appears in terminal logs and is saved as tuya-cloud-login.svg in the plugin's storage directory under Matterbridge data. If frontend logs do not preserve QR layout, open the saved SVG on another screen.
+4. Confirm authorization in the app. Discovery continues automatically. Later restarts reuse saved session; expired access tokens renew on demand.
 
 ```json
 {
-  "name": "matterbridge-tuya",
+  "name": "matterbridge-tuya-cloud",
   "type": "DynamicPlatform",
-  "version": "1.1.6",
   "debug": false,
   "unregisterOnShutdown": false,
   "options": {
-    "username": "you@example.com",
-    "password": "your-account-password",
-    "countryCode": "55",
-    "platform": "smart_life",
+    "authMode": "userCode",
+    "userCode": "YOUR_USER_CODE",
     "pollingInterval": 615,
     "statePollingInterval": 65
   },
-  "defaults": [],
-  "hiddenAccessories": [],
-  "scenes": false,
-  "scenesWhitelist": []
+  "hiddenAccessories": []
 }
 ```
 
-Supported platforms: `tuya`, `smart_life`, `jinvoo_smart`. Country code matches account registration. Existing API regional token routing retained.
+QR protocol follows Tuya's [device-sharing SDK](https://github.com/tuya/tuya-device-sharing-sdk). Defaults use its public Home Assistant client ID and haauthorize schema, as used in [Home Assistant](https://github.com/home-assistant/core/blob/dev/homeassistant/components/tuya/const.py). This project is independent of Home Assistant/Tuya; standalone authorization acceptance has not been validated. options.sharingClientId and options.sharingSchema allow a separately authorized sharing application. There is no dedicated plugin web login page yet.
 
-`pollingInterval` controls discovery, default/minimum 615 seconds. `statePollingInterval` controls sequential device queries, default/minimum 65 seconds; `0` disables periodic queries. Polling cycles never overlap. Rate limits defer further requests; temporary errors retain endpoints and attributes. Cloud discovery reconciles additions/removals only after valid successful response. Scene devices receive no periodic query.
+Sharing tokens reside in tuya-cloud-session.json with owner-only file permissions. They are secrets; do not commit/share them. If authorization is revoked, stop plugin, remove that session file, and restart to scan a new QR. Transient renewal failures surface errors and retain devices; they do not silently erase the session or remove devices.
 
-`hiddenAccessories` and `scenesWhitelist` accept device IDs or names. Scenes disabled by default; enable with `scenes: true`. Legacy `scenes: ["ID-or-name"]` whitelist also supported. Prefer IDs for durable configuration.
+## Developer credentials
 
-Each `defaults` entry accepts `id` (ID/name), optional `device_type`, temperature limits/factors, brightness/Kelvin limits and feature lists. Factors multiply cloud temperature readings; outgoing target-temperature commands retain legacy Celsius payload. Empty feature list disables those features. Example:
+Create a cloud project on Tuya Developer Platform, link your Smart Life/Tuya account, select its matching data center, and grant access to IoT Core token, project discovery, device details, model, query-property and issue-property APIs. Service availability, quotas and billing depend on your Tuya project; check your console.
 
 ```json
 {
-  "defaults": [{
-    "id": "your-device-id",
-    "device_type": "light",
-    "light_characteristics": ["Brightness", "Color Temperature"],
-    "min_brightness": 10,
-    "max_brightness": 100,
-    "min_kelvin": 2000,
-    "max_kelvin": 6500
-  }]
+  "name": "matterbridge-tuya-cloud",
+  "type": "DynamicPlatform",
+  "options": {
+    "authMode": "developer",
+    "accessId": "YOUR_ACCESS_ID",
+    "accessSecret": "YOUR_ACCESS_SECRET",
+    "region": "us",
+    "pollingInterval": 615,
+    "statePollingInterval": 65
+  }
 }
 ```
 
-Feature lists: `dimmer_characteristics: ["Brightness"]`, `fan_characteristics: ["Speed"]`, `light_characteristics: ["Brightness", "Color", "Color Temperature"]`, `cover_characteristics: ["Stop"]`. Temperature settings: `min_temper`, `max_temper`, `current_temperature_factor`, `target_temperature_factor`.
+Regions: us (Western America), usEast (Eastern America), eu (Central Europe), euWest (Western Europe), cn (China), in (India), sg (Singapore). Developer mode discovers devices authorized to the project, not a manually supplied account ID. Use hiddenAccessories with IDs or names to exclude devices.
 
-## Device presentation
+Developer mode uses signed [IoT Core v2 APIs](https://developer.tuya.com/en/docs/cloud/device-connection-service?id=Kb0b8geg6o761): project device list, device details, thing model, shadow properties, and immediate property issue. The older /homeassistant/skill API and password login are removed. A permission error is reported explicitly; no silent legacy fallback.
 
-| Tuya category | Matter endpoint |
+## Plug behavior
+
+| Capability | Behavior |
 | --- | --- |
-| switch / outlet | On/Off Plug-in Unit (controllers commonly show outlet) |
-| dimmer | Dimmable Light |
-| light | On/Off, dimmable, color-temperature or extended-color light according to features |
-| temperature_sensor | Temperature Sensor |
-| fan | Fan, power and available speed |
-| climate | Thermostat, when required temperatures and mode capability exist |
-| cover / window | Window Covering, open/close and supported stop; no invented position |
-| scene | Momentary On/Off Plug-in Unit; On executes once then resets; Off has no cloud action |
-| garage | Unsupported with explicit diagnostic: legacy API lacks mandatory native Closure Control safety/error data |
+| On/off | Writable Boolean switch or switch_N datapoints; each channel gets a stable endpoint |
+| Current | cur_current converted to Matter milliamps |
+| Voltage | cur_voltage converted to Matter millivolts |
+| Power | cur_power converted to Matter milliwatts |
+| Energy | total_forward_energy (or explicitly verified configured counter) converted to cumulative imported milliwatt-hours |
+| Reachability | Explicit Tuya online flag |
 
-SDK contains native closure support, but legacy Tuya response has no mandatory `currentErrorList` safety state. Garage exposure remains blocked; no Window Covering fallback. Likewise, climate devices missing required temperatures/mode, and dimmable/color lights missing required brightness capability, receive diagnostics rather than false feature claims. Continuous light/color movement and unsupported cover operations return Matter errors. Lowest Matter light level is 1; cloud zero values parse correctly and clamp to valid light range.
+Only recognized units and explicit scale metadata produce readings. Missing/unknown metadata omits that measurement instead of guessing. Metering is attached to primary switch/switch_1 channel only, avoiding duplicate energy totals on multi-channel devices. Primary channel retains Tuya device ID; other channels use device ID plus datapoint code. Names never determine identity. Controller support determines presentation of standard Matter electrical clusters.
 
-Endpoint IDs, serials and unique IDs derive from Tuya ID; renaming preserves identity. Tuya `online` drives reachability. Transient HTTP/auth errors do not imply offline. `unregisterOnShutdown` defaults false; true removes registered endpoints on shutdown.
+No child lock, indicator/light mode, overcharge protection setting, power-on behavior, countdown, raw/phase-packed metering, or daily/monthly energy history mapping yet. Energy is the reported cumulative counter; the plugin does not invent totals from incremental reports. add_ele is not assumed cumulative: if your device is verified to report a cumulative value there, configure energyCounters: [{"id":"DEVICE_ID","code":"add_ele"}]. Incorrectly treating increments as totals corrupts energy statistics. Category/device variants require fixtures and hardware validation before claiming support. Existing light/fan/thermostat/cover mapping code remains tested in isolation but modern cloud adapter does not discover those categories yet. IR and garage remain unsupported.
 
-## Migrate from Homebridge
+Discovery defaults/minimum 615 seconds. State polling defaults/minimum 65 seconds; 0 disables state queries. Queries are sequential and polling cycles never overlap. Rate limits back off; transient errors retain devices and last-known attributes. Only complete successful discovery reconciles removals. Commands commit cached state only after cloud success; unsupported operations return errors. Configuration changes require restart. Shutdown cancels network requests and timers; unregisterOnShutdown defaults false.
 
-Copy nested `options`, `defaults`, `hiddenAccessories`, `scenes` and `scenesWhitelist` to new configuration. Remove Homebridge `platform`, `accessory`, bridge and cached-accessory metadata; set Matterbridge `name`/`type` as above. Homebridge pairing records cannot migrate; pair Matterbridge through chosen Matter controller. Controller appearance and HomeKit-specific semantics may differ. Replace old discovery polling `0`/values below 615 with 615; disable device queries using new `statePollingInterval: 0`.
+This is cloud control: server or Tuya cloud/internet outages interrupt Home Assistant control through this plugin. Smart Life/Tuya Smart app can still operate independently when server is down, provided devices and cloud remain online. LocalTuya can remain installed while testing; entity IDs and automations do not migrate automatically.
 
-## Local validation
+## Validation and release
 
 ```sh
 bun run build
@@ -105,6 +107,14 @@ bun run test
 bun run test:package
 ```
 
-Tests use mocked HTTP and simulated Matter networking with real endpoints; no live credentials, pairing or controller tests. Hardware validation remains outstanding for every category. Business behavior source: [docs/business-rules.md](docs/business-rules.md). Execution progress: [plans/0001-tuya-matterbridge-port.md](plans/0001-tuya-matterbridge-port.md).
+Tests use mocked cloud HTTP and simulated Matter networking with real endpoints. Neither login mode, physical plug readings, pairing, nor full host/controller restart has been validated on hardware. No live Tuya account requests occur during tests.
 
-Original Tuya Web client copyright and MIT license retained.
+The **Build and release plugin** workflow builds/tests pushes to main, pull requests and manual runs. Successful runs provide a downloadable matterbridge-tuya-cloud artifact containing the tested .tgz (30-day retention).
+
+To enable npm releases, configure GitHub Actions secret NPM_TOKEN with publish permission for matterbridge-tuya-cloud. The publication job uses the npm environment, where you can require approval. Bun uses NPM_CONFIG_TOKEN; no npm CLI is used. [Bun publishing documentation](https://bun.sh/docs/pm/cli/publish).
+
+After reviewing and pushing the prepared code yourself, create/push a stable version tag matching package.json (for this release, v0.1.0). Tag pushes build and test first, verify the exact version, then publish that same tarball to npm with latest tag. Branch pushes, pull requests and manual build runs never publish. Only trigger a release after confirming account rights and live compatibility appropriate for your release.
+
+No GitHub push, remote workflow execution or npm publication is performed by local builds/tests. npm authentication was unavailable during implementation, so publication remains pending. Business rules: [docs/business-rules.md](docs/business-rules.md). Execution record: [plans/done/0002-tuya-cloud-plugs.md](plans/0002-tuya-cloud-plugs.md).
+
+Original project MIT copyright/license retained. Device-sharing protocol interoperability is based on Tuya's Apache-2.0 SDK; see [NOTICE](NOTICE).
