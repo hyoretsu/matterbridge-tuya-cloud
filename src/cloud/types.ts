@@ -19,7 +19,7 @@ export function list(value: unknown): unknown[] { if (!Array.isArray(value)) thr
 export function cloudDevice(value: unknown): CloudDevice {
   const data = object(value);
   if (typeof data.id !== 'string' || !data.id || typeof data.name !== 'string' || typeof data.category !== 'string' || typeof data.online !== 'boolean') throw new Error('Malformed Tuya device');
-  const status = list(data.status).map(value => { const point = object(value); if (typeof point.code !== 'string' || !('value' in point)) throw new Error('Malformed Tuya status'); return {code: point.code, value: point.value}; });
+  const status = (data.status === undefined || data.status === null ? [] : list(data.status)).map(value => { const point = object(value); if (typeof point.code !== 'string' || !('value' in point)) throw new Error('Malformed Tuya status'); return {code: point.code, value: point.value}; });
   return { id: data.id, name: data.name, category: data.category, online: data.online, status };
 }
 export function cloudSpecification(value: unknown): CloudSpecification {
