@@ -7,8 +7,7 @@ on:
 permissions:
   contents: read
 jobs:
-  version:
-    if: github.event_name == 'push'
+  build:
     runs-on: ubuntu-latest
     outputs:
       bumped: ${{ steps.version.outputs.bumped }}
@@ -18,8 +17,12 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
       - name: Resolve release version
         id: version
+        if: github.event_name == 'push'
         run: |
           current=$(node -p "require('./package.json').version")
           if git rev-parse -q --verify "refs/tags/v$current" >/dev/null; then
@@ -29,24 +32,17 @@ jobs:
             echo "bumped=false" >> "$GITHUB_OUTPUT"
           fi
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-      - run: bun run test
-  package:
-    needs: version
-    if: ${{ !cancelled() && !failure() }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Apply release version
-        if: needs.version.outputs.bumped == 'true'
-        run: npm version "${{ needs.version.outputs.version }}" --no-git-tag-version >/dev/null
-      - uses: ./.github/actions/setup
+      - run: bun install --frozen-lockfile
+      - run: mkdir -p .sdk && cp tools/sdk.package.json .sdk/package.json
+      - run: bun install --cwd .sdk --ignore-scripts
+      - run: bun run sdk:link
+      - name: Test
+        run: bun run test
+        background: true
       - run: bun run build
       - run: bun run test:package
+      - name: Wait for tests
+        wait-all:
       - name: Package tested plugin
         run: bun pm pack --ignore-scripts --destination artifacts
       - uses: actions/upload-artifact@v4
@@ -57,7 +53,7 @@ jobs:
           retention-days: 30
   publish:
     if: github.event_name == 'push'
-    needs: [version, test, package]
+    needs: build
     runs-on: ubuntu-latest
     environment: npm
     permissions:
@@ -70,8 +66,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Commit version and tag release
         env:
-          BUMPED: ${{ needs.version.outputs.bumped }}
-          VERSION: ${{ needs.version.outputs.version }}
+          BUMPED: ${{ needs.build.outputs.bumped }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
