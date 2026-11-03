@@ -23,7 +23,7 @@
     "smartlife",
     "matter"
   ],
-  "author": "Aran Leite <hyoretsu@gmail.com>",
+  "author": "Aran Leite",
   "license": "MIT",
   "publishConfig": {
     "access": "public"
