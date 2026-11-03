@@ -34,12 +34,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hyoretsu/matterbridge-tuya.git"
+    "url": "git+https://github.com/hyoretsu/matterbridge-tuya-cloud.git"
   },
   "bugs": {
-    "url": "https://github.com/hyoretsu/matterbridge-tuya/issues"
+    "url": "https://github.com/hyoretsu/matterbridge-tuya-cloud/issues"
   },
-  "homepage": "https://github.com/hyoretsu/matterbridge-tuya#readme",
+  "homepage": "https://github.com/hyoretsu/matterbridge-tuya-cloud#readme",
   "dependencies": {
     "qrcode": "^1.5.4"
   },
