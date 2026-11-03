@@ -2,7 +2,7 @@
   "displayName": "Tuya Cloud",
   "name": "matterbridge-tuya-cloud",
   "version": "0.1.3",
-  "description": "Matterbridge Tuya cloud plugin with QR and developer authentication",
+  "description": "Matterbridge Tuya Cloud",
   "main": "dist/src/index.js",
   "scripts": {
     "build": "bun tools/build.ts",
