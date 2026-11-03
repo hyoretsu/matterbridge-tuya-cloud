@@ -94,6 +94,11 @@ export function buildDevice(controller: DeviceController, device: TuyaDevice): D
   let disposed = false;
   return {
     endpoint,
+    addChild(childController, childDevice) {
+      const child = endpoint.addChildDeviceType(childDevice.setting?.description ?? childDevice.name, modeSelect, { id: deviceIdentity(childDevice.id) });
+      const childUpdate = configureModeSelect(child, childController, childDevice);
+      return { endpoint: child, update: childUpdate, dispose() {} };
+    },
     async update(state) {
       if (disposed) return;
       const online = boolean(state.online);

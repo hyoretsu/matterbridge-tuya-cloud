@@ -29,5 +29,5 @@ export function settingState(channel:SettingChannel,device=channel.device):Devic
   return {selected_mode:mode.mode,online:device.online};
 }
 export function settingDevice(channel:SettingChannel):TuyaDevice {
-  return {id:channel.device.id+':config:'+channel.code,name:channel.device.name+' '+channel.label,dev_type:'mode_select',ha_type:'switch',data:settingState(channel),setting:{description:channel.label,modes:channel.modes.map(({mode,label})=>({mode,label}))}};
+  return {id:channel.device.id+':config:'+channel.code,parentId:channel.device.id,name:channel.device.name+' '+channel.label,dev_type:'mode_select',ha_type:'switch',data:settingState(channel),setting:{description:channel.label,modes:channel.modes.map(({mode,label})=>({mode,label}))}};
 }

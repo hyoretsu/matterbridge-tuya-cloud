@@ -5,6 +5,7 @@ import type { ModernCloudClient } from "./cloud/CloudClient.js";
 import { join } from "node:path";
 import { DeviceController } from "./controller.js";
 import { applyDeviceConfiguration, validateConfig, type ValidatedConfig } from "./config.js";
+import type { TuyaDevice } from "./api/response.js";
 import { RateLimitError } from "./errors/index.js";
 import { buildDevice, deviceIdentity, type DeviceBinding } from "./devices/index.js";
 import { MIN_MATTERBRIDGE_VERSION } from "./settings.js";
@@ -16,6 +17,14 @@ interface RegisteredDevice {
   unsubscribe: () => void;
   updates: Promise<void>;
   revision: number;
+  children: ChildEntry[];
+}
+interface ChildEntry {
+  id: string;
+  controller: DeviceController;
+  binding: DeviceBinding;
+  unsubscribe: () => void;
+  updates: Promise<void>;
 }
 
 export class TuyaPlatform extends MatterbridgeDynamicPlatform {
@@ -62,7 +71,7 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
   override async onConfigure(): Promise<void> {
     if (!this.running) return;
     await super.onConfigure();
-    for (const entry of this.devices.values()) await entry.binding.update(entry.controller.state);
+    for (const entry of this.devices.values()) { await entry.binding.update(entry.controller.state); for (const child of entry.children) await child.binding.update(child.controller.state); }
     this.configured = true;
     this.nextDiscovery = Date.now() + this.settings!.options.pollingInterval * 1000;
     this.nextState = this.settings!.options.statePollingInterval === 0 ? Infinity : Date.now() + this.settings!.options.statePollingInterval * 1000;
@@ -78,7 +87,12 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
       const discovered = await this.client!.discoverDevices();
       if (!this.running) return;
       if (!Array.isArray(discovered)) throw new Error("Malformed Tuya discovery; retaining registered devices");
-      const devices = applyDeviceConfiguration(discovered, this.settings!);
+      const all = applyDeviceConfiguration(discovered, this.settings!);
+      const ids = new Set(all.map(device => device.id));
+      // Settings are nested under their parent device; orphans stay standalone.
+      const isChild = (device: TuyaDevice) => device.parentId !== undefined && ids.has(device.parentId);
+      const devices = all.filter(device => !isChild(device));
+      const childrenOf = (id: string) => all.filter(device => device.parentId === id && isChild(device));
       const present = new Set(devices.map(device => device.id));
       for (const [id, entry] of this.devices) {
         if (present.has(id)) continue;
@@ -92,7 +106,9 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
         if (existing) {
           // An intervening command/query is newer than this discovery snapshot.
           if (existing.revision === revisions.get(device.id)) existing.controller.update(device.data);
+          for (const child of childrenOf(device.id)) existing.children.find(entry => entry.id === child.id)?.controller.update(child.data);
           await existing.updates;
+          for (const child of existing.children) await child.updates;
           continue;
         }
         const controller = new DeviceController(device, this.client!);
@@ -106,10 +122,30 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
           this.log.warn(`Unsupported Tuya ${device.dev_type} device ${device.id}: ${error instanceof Error ? error.message : String(error)}`);
           continue;
         }
-        const entry: RegisteredDevice = { controller, binding, updates: Promise.resolve(), revision: 0, unsubscribe: () => undefined };
+        const entry: RegisteredDevice = { controller, binding, updates: Promise.resolve(), revision: 0, unsubscribe: () => undefined, children: [] };
+        for (const childDevice of childrenOf(device.id)) {
+          const childController = new DeviceController(childDevice, this.client!);
+          try {
+            const childBinding = binding.addChild!(childController, childDevice);
+            entry.children.push({ id: childDevice.id, controller: childController, binding: childBinding, unsubscribe: () => undefined, updates: Promise.resolve() });
+          } catch (error) {
+            childController.dispose();
+            this.log.warn(`Unsupported Tuya setting ${childDevice.id}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
         try {
           await this.registerDevice(binding.endpoint);
-          if (this.configured) await binding.update(controller.state);
+          if (this.configured) {
+            await binding.update(controller.state);
+            for (const child of entry.children) await child.binding.update(child.controller.state);
+          }
+          for (const child of entry.children) {
+            child.unsubscribe = child.controller.subscribe(state => {
+              child.updates = child.updates.then(() => child.binding.update(state)).catch(error => {
+                this.log.error(`Matter attribute update failed for ${child.id}: ${error instanceof Error ? error.message : String(error)}`);
+              });
+            });
+          }
           entry.unsubscribe = controller.subscribe(state => {
             entry.revision++;
             entry.updates = entry.updates.then(() => binding.update(state)).catch(error => {
@@ -134,7 +170,10 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
       for (const [id, entry] of this.devices) {
         if (!this.running) break;
         if (entry.controller.device.dev_type === "scene") continue;
-        try { await entry.controller.query(); await entry.updates; }
+        try {
+          await entry.controller.query(); await entry.updates;
+          for (const child of entry.children) { await child.controller.query(); await child.updates; }
+        }
         catch (error) {
           if (error instanceof RateLimitError) throw error;
           if (this.running) this.log.warn(`Tuya query failed for ${id}; retaining state: ${error instanceof Error ? error.message : String(error)}`);
@@ -176,6 +215,11 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
     entry.unsubscribe();
     entry.controller.dispose();
     entry.binding.dispose();
+    for (const child of entry.children) {
+      child.unsubscribe();
+      child.controller.dispose();
+      child.binding.dispose();
+    }
   }
 
   override async onConfigChanged(): Promise<void> {

@@ -66,6 +66,7 @@ export type HomeAssistantDeviceType = (typeof HomeAssistantDeviceTypes)[number];
 
 export interface TuyaDevice {
   lightRanges?: {whiteBrightness?:{min:number;max:number};colorBrightness?:{min:number;max:number};kelvin?:{min:number;max:number}};
+  parentId?: string;
   setting?: {description:string;modes:{mode:number;label:string}[]};
   data: DeviceState;
   name: string;
