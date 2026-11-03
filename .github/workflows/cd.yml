@@ -12,6 +12,7 @@ jobs:
     outputs:
       bumped: ${{ steps.version.outputs.bumped }}
       version: ${{ steps.version.outputs.version }}
+      retag: ${{ steps.version.outputs.retag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,12 +27,19 @@ jobs:
         run: |
           current=$(node -p "require('./package.json').version")
           bumped=false
+          retag=false
+          # only move on to a new version once the tagged one is actually on npm
           while git rev-parse -q --verify "refs/tags/v$current" >/dev/null; do
+            if ! npm view "matterbridge-tuya-cloud@$current" version >/dev/null 2>&1; then
+              retag=true
+              break
+            fi
             npm version patch --no-git-tag-version >/dev/null
             current=$(node -p "require('./package.json').version")
             bumped=true
           done
           echo "bumped=$bumped" >> "$GITHUB_OUTPUT"
+          echo "retag=$retag" >> "$GITHUB_OUTPUT"
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - run: bun install --frozen-lockfile
       - run: mkdir -p .sdk && cp tools/sdk.package.json .sdk/package.json
@@ -69,6 +77,7 @@ jobs:
         env:
           BUMPED: ${{ needs.build.outputs.bumped }}
           VERSION: ${{ needs.build.outputs.version }}
+          RETAG: ${{ needs.build.outputs.retag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -76,7 +85,10 @@ jobs:
             npm version "$VERSION" --no-git-tag-version >/dev/null
             git commit -am "chore(matterbridge-tuya-cloud): release v$VERSION [skip ci]"
           fi
-          git tag "v$VERSION"
+          if [ "$RETAG" = "true" ]; then
+            git push origin ":refs/tags/v$VERSION"
+          fi
+          git tag -f "v$VERSION"
           git push origin HEAD:main "v$VERSION"
       - uses: actions/setup-node@v6
         with:
