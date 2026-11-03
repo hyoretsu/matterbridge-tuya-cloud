@@ -6,12 +6,13 @@
   "main": "dist/src/index.js",
   "scripts": {
     "build": "bun tools/build.ts",
-    "test": "bun test src tests",
-    "test:unit": "bun test src",
-    "test:integration": "bun test tests",
+    "test": "bun test --parallel src tests",
+    "test:unit": "bun test --parallel src",
+    "test:integration": "bun test --parallel tests",
     "test:package": "bun tools/check-package.ts",
     "sdk:link": "bun tools/link-sdk.ts",
     "prepublishOnly": "bun run build && bun run test && bun run test:package",
+    "check": "bun node_modules/typescript/bin/tsc --project tsconfig.check.json",
     "lint": "bun node_modules/eslint/bin/eslint.js .",
     "prettier": "bun node_modules/prettier/bin/prettier.cjs --check ."
   },
