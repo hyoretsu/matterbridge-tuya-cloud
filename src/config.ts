@@ -39,6 +39,7 @@ export interface TuyaWebConfig {
   defaults?: Partial<TuyaDeviceDefaults>[];
   hiddenAccessories?: string[];
   energyCounters?: {id: string; code: string}[];
+  lightTemperatureRanges?: {id:string;minKelvin:number;maxKelvin:number}[];
   scenes?: boolean | string[];
   scenesWhitelist?: string[];
 }
@@ -101,6 +102,7 @@ export function validateConfig(config: TuyaWebConfig): ValidatedConfig {
       if (values !== undefined && (!Array.isArray(values) || values.some(value => !(allowed as readonly string[]).includes(value)))) throw new Error(`Invalid ${key} for ${override.id}`);
     }
   }
+  if(config.lightTemperatureRanges!==undefined&&(!Array.isArray(config.lightTemperatureRanges)||config.lightTemperatureRanges.some(range=>!range||typeof range.id!=='string'||!range.id.trim()||!Number.isInteger(range.minKelvin)||!Number.isInteger(range.maxKelvin)||range.minKelvin<1000||range.maxKelvin>20000||range.maxKelvin<=range.minKelvin)))throw new Error('lightTemperatureRanges requires id and increasing Kelvin bounds within 1000–20000 K');
   if (config.energyCounters !== undefined && (!Array.isArray(config.energyCounters) || config.energyCounters.some(item => !item || typeof item.id !== 'string' || !item.id.trim() || typeof item.code !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(item.code)))) throw new Error('energyCounters requires device id and verified cumulative datapoint code');
   if (config.unregisterOnShutdown !== undefined && typeof config.unregisterOnShutdown !== "boolean") throw new Error("unregisterOnShutdown must be boolean");
   return { ...structuredClone(config), scenes: config.scenes ?? false, options: { ...options, authMode, userCode: options.userCode ?? "", accessId: options.accessId ?? "", accessSecret: options.accessSecret ?? "", userId: options.userId ?? "", region, pollingInterval, statePollingInterval } };

@@ -1,4 +1,5 @@
 import {createHash, createHmac} from 'node:crypto';
+import {LIGHT_CATEGORIES} from './light-data.js';
 import {HttpClient} from './HttpClient.js';
 import {cloudDevice, cloudSpecification, list, object, type CloudBackend, type CloudPoint, type CloudTransport} from './types.js';
 export const REGIONS = {us: 'https://openapi.tuyaus.com', usEast: 'https://openapi-ueaz.tuyaus.com', eu: 'https://openapi.tuyaeu.com', euWest: 'https://openapi-weaz.tuyaeu.com', cn: 'https://openapi.tuyacn.com', in: 'https://openapi.tuyain.com', sg: 'https://openapi-sg.iotbing.com'} as const;
@@ -45,7 +46,7 @@ export class OpenApi implements CloudBackend {
         const data = object(value);
         if(typeof data.id !== 'string' || !data.id)throw new Error('Malformed Tuya project device');
         if(devices.has(data.id))throw new Error('Repeated Tuya discovery page');
-        const status = ['cz','pc'].includes(String(data.category)) ? await this.properties(data.id) : [];
+        const status = ['cz','pc',...LIGHT_CATEGORIES].includes(String(data.category)) ? await this.properties(data.id) : [];
         const device = cloudDevice({...data,name:data.customName || data.name,online:data.isOnline,status});devices.set(device.id,device);last=device.id;
       }
       if(result.length<20)return [...devices.values()];

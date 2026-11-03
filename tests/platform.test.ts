@@ -95,7 +95,7 @@ describe('real Matter endpoints', () => {
     expect(entry.binding.endpoint.hasClusterServer(OnOff.id)).toBe(false);
     await entry.binding.endpoint.act(async agent=>{await agent.get(ModeSelectServer).changeToMode({newMode:1});});
     expect(calls.at(-1)).toEqual({id:'mode_select',method:'configurationSet',payload:{value:1}});expect(entry.binding.endpoint.state.modeSelect.currentMode).toBe(1);
-    commandFailure=new Error('setting denied');try{await expect(entry.binding.endpoint.act(async agent=>{await agent.get(ModeSelectServer).changeToMode({newMode:0});})).rejects.toThrow('setting denied');}finally{commandFailure=undefined;}
+    commandFailure=new Error('setting denied');try{await expect(entry.binding.endpoint.act(async agent=>{await agent.get(ModeSelectServer).changeToMode({newMode:0});})).rejects.toThrow('commit phase one error');}finally{commandFailure=undefined;}
     expect(entry.binding.endpoint.state.modeSelect.currentMode).toBe(1);expect(entry.controller.state.selected_mode).toBe(1);
     const before=calls.length;await expect(entry.binding.endpoint.act(async agent=>{await agent.get(ModeSelectServer).changeToMode({newMode:99});})).rejects.toThrow('Unsupported');expect(calls.length).toBe(before);
     await entry.binding.update({selected_mode:0});expect(entry.binding.endpoint.state.modeSelect.currentMode).toBe(0);
@@ -107,10 +107,30 @@ describe('real Matter endpoints', () => {
     expect(entry.controller.state.state).toBe(true);
     expect(attributes('switch', OnOff)?.onOff).toBe(true);
     commandFailure = new Error('cloud failed');
-    try { await expect(entry.binding.endpoint.act(async agent => { await agent.get(OnOffServer).off(); })).rejects.toThrow('cloud failed'); }
+    try { await expect(entry.binding.endpoint.act(async agent => { await agent.get(OnOffServer).off(); })).rejects.toThrow('commit phase one error'); }
     finally { commandFailure = undefined; }
     expect(entry.controller.state.state).toBe(true);
     expect(attributes('switch', OnOff)?.onOff).toBe(true);
+  });
+  test('native toggle sends one command and remote startup writes fail explicitly', async () => {
+    const entry = platform.devices.get('switch')!;
+    const before = calls.length;
+    await entry.binding.endpoint.act(async agent => { await agent.get(OnOffServer).toggle(); });
+    expect(calls.length).toBe(before + 1);
+    expect(entry.controller.state.state).toBe(false);
+    expect(attributes('switch', OnOff)?.onOff).toBe(false);
+    await entry.binding.endpoint.act(async agent => { await agent.get(OnOffServer).toggle(); });
+    expect(calls.length).toBe(before + 2);
+    expect(entry.controller.state.state).toBe(true);
+    const endpoint = platform.devices.get('light')!.binding.endpoint;
+    await expect(endpoint.act(async agent => {
+      const remote = endpoint.agentFor({...agent.context, fabric: {fabricIndex: 1}});
+      const behavior = remote.get(OnOffServer);
+      await agent.context.transaction.begin();
+      await agent.context.transaction.addResources(behavior);
+      behavior.state.startUpOnOff = OnOff.StartUpOnOff.On;
+    })).rejects.toThrow('startup/timer');
+    expect(calls.length).toBe(before + 2);
   });
   test('fan and thermostat attribute writes await cloud commit and roll back on failure', async () => {
     const fan = platform.devices.get('fan')!;

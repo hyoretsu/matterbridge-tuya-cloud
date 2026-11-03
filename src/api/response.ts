@@ -65,6 +65,7 @@ export const HomeAssistantDeviceTypes = [
 export type HomeAssistantDeviceType = (typeof HomeAssistantDeviceTypes)[number];
 
 export interface TuyaDevice {
+  lightRanges?: {whiteBrightness?:{min:number;max:number};colorBrightness?:{min:number;max:number};kelvin?:{min:number;max:number}};
   setting?: {description:string;modes:{mode:number;label:string}[]};
   data: DeviceState;
   name: string;
@@ -121,9 +122,9 @@ export type TuyaApiPayload<Method extends TuyaApiMethod> =
   Method extends "configurationSet"
     ? {value:number}
     : Method extends "brightnessSet"
-    ? { value: number }
+    ? { value: number; onOff?: 0 | 1; level?: number }
     : Method extends "colorSet"
-      ? { color: { hue: number; saturation: number; brightness: number } }
+      ? { color: { hue?: number; saturation?: number; brightness?: number } }
       : Method extends "colorTemperatureSet"
         ? { value: number }
         : Method extends "modeSet"

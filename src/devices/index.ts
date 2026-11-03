@@ -4,7 +4,7 @@ import { OnOffServer, ScenesManagementServer } from 'matterbridge/matter/behavio
 import { BridgedDeviceBasicInformation, OnOff, TemperatureMeasurement } from 'matterbridge/matter/clusters';
 import type { DeviceController } from '../controller.js';
 import { TuyaDeviceTypes, type DeviceState, type TuyaDevice } from '../api/response.js';
-import { boolean, numeric, matterCommand, unsupported } from './conversions.js';
+import { boolean, numeric, matterCommand, unsupported, unsupportedWrite, cloudWrite } from './conversions.js';
 import { configureLight, lightCapabilities } from './light.js';
 import { configureCover } from './cover.js';
 import { configureFan } from './fan.js';
@@ -52,16 +52,29 @@ export function buildDevice(controller: DeviceController, device: TuyaDevice): D
       }
       endpoint.behaviors.require(TuyaSceneServer, { onOff: false });
     } else {
-      endpoint.createDefaultOnOffClusterServer(boolean(device.data.state) ?? false);
-      endpoint.addCommandHandler('on', async () => matterCommand(() => controller.command('turnOnOff', { value: 1 }, { state: true })));
-      endpoint.addCommandHandler('off', async () => matterCommand(() => controller.command('turnOnOff', { value: 0 }, { state: false })));
-      endpoint.addCommandHandler('toggle', async () => {
-        const value = boolean(controller.state.state) !== true;
-        await matterCommand(() => controller.command('turnOnOff', { value: value ? 1 : 0 }, { state: value }));
-      });
-      endpoint.addCommandHandler('OnOff.onWithRecallGlobalScene', async () => unsupported('Scene recall unavailable'));
-      endpoint.addCommandHandler('OnOff.onWithTimedOff', async () => unsupported('Timed cloud commands unavailable'));
-      endpoint.addCommandHandler('offWithEffect', async () => matterCommand(() => controller.command('turnOnOff', { value: 0 }, { state: false })));
+      const lighting = device.dev_type === 'light' || device.dev_type === 'dimmer';
+      const powerRole = {};
+      const writePower = (on:boolean) => matterCommand(()=>controller.command('turnOnOff',{value:on?1:0},{state:on}));
+      class TuyaPowerServer extends OnOffServer.with(...(lighting ? [OnOff.Feature.Lighting] : [])) {
+        override initialize() {
+          const result = super.initialize();
+          if(lighting) for(const event of [this.events.startUpOnOff$Changing,this.events.onTime$Changing,this.events.offWaitTime$Changing])this.maybeReactTo(event,function(_value,_old,context){if(context.fabric!==undefined)unsupportedWrite('Cloud startup/timer attribute writes unavailable; use supported configuration endpoint');});
+          return result;
+        }
+        override async on() {this.state.onOff=true;cloudWrite(this.context.transaction,powerRole,()=>writePower(true));}
+        override async off() {this.state.onOff=false;cloudWrite(this.context.transaction,powerRole,()=>writePower(false));}
+        override async toggle() {const on=!this.state.onOff;this.state.onOff=on;cloudWrite(this.context.transaction,powerRole,()=>writePower(on));}
+        override async offWithEffect() {unsupported('Cloud off effects unavailable');}
+        override async onWithRecallGlobalScene() {unsupported('Scene recall unavailable');}
+        override async onWithTimedOff() {unsupported('Timed cloud commands unavailable');}
+      }
+      endpoint.behaviors.require(TuyaPowerServer,{onOff:boolean(device.data.state)??false,...(lighting?{globalSceneControl:false,onTime:0,offWaitTime:0,startUpOnOff:null}:{})});
+      endpoint.addCommandHandler('on', async()=>writePower(true));
+      endpoint.addCommandHandler('off', async()=>writePower(false));
+      endpoint.addCommandHandler('toggle', async()=>writePower(boolean(controller.state.state)!==true));
+      endpoint.addCommandHandler('OnOff.onWithRecallGlobalScene', async()=>unsupported('Scene recall unavailable'));
+      endpoint.addCommandHandler('OnOff.onWithTimedOff', async()=>unsupported('Timed cloud commands unavailable'));
+      endpoint.addCommandHandler('offWithEffect', async()=>unsupported('Cloud off effects unavailable'));
     }
   }
   if (device.dev_type === 'mode_select') updateMapping = configureModeSelect(endpoint,controller,device);

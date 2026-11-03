@@ -36,3 +36,5 @@ export async function matterCommand(operation: () => Promise<void>): Promise<voi
     throw new StatusResponseError(error instanceof Error ? error.message : 'Tuya command failed', Status.Failure);
   }
 }
+
+export function unsupportedWrite(message:string):never {throw new StatusResponseError(message,Status.UnsupportedWrite);}

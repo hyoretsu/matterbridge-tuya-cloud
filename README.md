@@ -2,7 +2,7 @@
 
 Version 0.x tracks incomplete feature development; 1.0.0 is reserved for completed feature coverage.
 
-Experimental Matterbridge plugin for Tuya / Smart Life cloud devices. Current cloud discovery targets smart plugs (Tuya categories cz and pc), with on/off and available electrical readings. This is not a complete LocalTuya replacement: modern light/IR mappings and plug configuration controls are not implemented.
+Experimental Matterbridge plugin for Tuya / Smart Life cloud devices. Current cloud discovery supports smart plugs (Tuya categories cz and pc), plug settings and capability-based lights. This is not a complete LocalTuya replacement: universal IR controllers remain unsupported.
 
 Requires Matterbridge 3.10.13+ and a host-supported Node version (Node 22.13+ baseline). Development and release commands use Bun. The package contains no Matterbridge or @matter dependencies; the host provides them.
 
@@ -94,7 +94,19 @@ Developer mode uses signed [IoT Core v2 APIs](https://developer.tuya.com/en/docs
 
 Only recognized units and explicit scale metadata produce readings. Missing/unknown metadata omits that measurement instead of guessing. Metering is attached to primary switch/switch_1 channel only, avoiding duplicate energy totals on multi-channel devices. Primary channel retains Tuya device ID; other channels use device ID plus datapoint code. Names never determine identity. Controller support determines presentation of standard Matter electrical clusters.
 
-Child lock, protection, indicator mode and power-on behavior use Mode Select endpoints when their datapoints are writable and current values are known. Their IDs include :config:<datapoint>; they never masquerade as relay on/off. Availability/display depends on controller Mode Select support. Countdown, raw/phase-packed metering, and daily/monthly energy history remain unsupported. Energy is the reported cumulative counter; the plugin does not invent totals from incremental reports. add_ele is not assumed cumulative: if your device is verified to report a cumulative value there, configure energyCounters: [{"id":"DEVICE_ID","code":"add_ele"}]. Incorrectly treating increments as totals corrupts energy statistics. Category/device variants require fixtures and hardware validation before claiming support. Existing light/fan/thermostat/cover mapping code remains tested in isolation but modern cloud adapter does not discover those categories yet. IR and garage remain unsupported.
+Child lock, protection, indicator mode and power-on behavior use Mode Select endpoints when their datapoints are writable and current values are known. Their IDs include :config:<datapoint>; they never masquerade as relay on/off. Availability/display depends on controller Mode Select support. Countdown, raw/phase-packed metering, and daily/monthly energy history remain unsupported. Energy is the reported cumulative counter; the plugin does not invent totals from incremental reports. add_ele is not assumed cumulative: if your device is verified to report a cumulative value there, configure energyCounters: [{"id":"DEVICE_ID","code":"add_ele"}]. Incorrectly treating increments as totals corrupts energy statistics. Category/device variants require fixtures and hardware validation before claiming support. Fan/thermostat/cover mappings remain tested in isolation; modern cloud discovery does not expose those categories. IR and garage remain unsupported.
+
+## Light behavior
+
+Modern discovery recognizes dj, xdd, dd, fwd, dc, tgq and tgkg lights when a writable Boolean power datapoint exists. Endpoints expose on/off, dimming, color temperature or extended color according to reported capabilities. Brightness uses advertised integer ranges and steps. RGB requires colour_data_v2 JSON HSV; raw/hex color formats, scene and music modes remain unsupported.
+
+Relative Tuya temperature indices do not establish a lamp's Kelvin bounds. To expose color temperature, supply manufacturer-verified bounds at the top configuration level:
+
+```json
+{"lightTemperatureRanges": [{"id": "DEVICE_ID", "minKelvin": 2700, "maxKelvin": 6500}]}
+```
+
+Direct Kelvin datapoints with explicit K units use their advertised scaled bounds. Writes are immediate: fades, continuous movement, lighting effects, timed power and remote startup/timer attribute changes return unsupported errors. Brightness with power is sent as one cloud batch; partial color changes preserve the latest queued components. Failed writes retain previous state. Physical bulbs and controller presentation still require validation.
 
 Discovery defaults/minimum 615 seconds. State polling defaults/minimum 65 seconds; 0 disables state queries. Queries are sequential and polling cycles never overlap. Relay and configuration endpoints belonging to one physical device share one query per polling cycle; writes invalidate that cached query and serialize by physical device. Rate limits back off; transient errors retain devices and last-known attributes. Only complete successful discovery reconciles removals. Commands commit cached state only after cloud success; unsupported operations return errors. Configuration changes require restart. Shutdown cancels network requests and timers; unregisterOnShutdown defaults false.
 
@@ -116,6 +128,6 @@ To enable npm releases, configure GitHub Actions secret NPM_TOKEN with publish p
 
 After reviewing and pushing the prepared code yourself, create/push a stable version tag matching package.json (for this release, v0.1.0). Tag pushes build and test first, verify the exact version, then publish that same tarball to npm with latest tag. Branch pushes, pull requests and manual build runs never publish. Only trigger a release after confirming account rights and live compatibility appropriate for your release.
 
-No GitHub push, remote workflow execution or npm publication is performed by local builds/tests. npm authentication was unavailable during implementation, so publication remains pending. Business rules: [docs/business-rules.md](docs/business-rules.md). Execution record: [plans/0002-tuya-cloud-plugs.md](plans/0002-tuya-cloud-plugs.md).
+No GitHub push, remote workflow execution or npm publication is performed by local builds/tests. npm authentication was unavailable during implementation, so publication remains pending. Business rules: [docs/business-rules.md](docs/business-rules.md). Execution record: [plans/done/0002-tuya-cloud-plugs.md](plans/done/0002-tuya-cloud-plugs.md).
 
 Original project MIT copyright/license retained. Device-sharing protocol interoperability is based on Tuya's Apache-2.0 SDK; see [NOTICE](NOTICE).

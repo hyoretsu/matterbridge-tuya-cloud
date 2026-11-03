@@ -50,3 +50,8 @@ test('modern auth defaults to User Code and validates developer fields independe
   expect(validateConfig({name:'matterbridge-tuya-cloud',options:{authMode:'developer',accessId:'id',accessSecret:'secret',region:'eu'}}).options.region).toBe('eu');
   expect(()=>validateConfig({name:'matterbridge-tuya-cloud',options:{userCode:'code',region:'invalid' as never}})).toThrow('region');
 });
+
+test('light Kelvin bounds require finite increasing manufacturer ranges',()=>{
+  expect(validateConfig({...config,lightTemperatureRanges:[{id:'light',minKelvin:2700,maxKelvin:6500}]}).lightTemperatureRanges?.[0]?.minKelvin).toBe(2700);
+  for(const range of [{id:'light',minKelvin:0,maxKelvin:6500},{id:'light',minKelvin:6500,maxKelvin:2700},{id:'light',minKelvin:2700,maxKelvin:Infinity}])expect(()=>validateConfig({...config,lightTemperatureRanges:[range]})).toThrow('Kelvin');
+});

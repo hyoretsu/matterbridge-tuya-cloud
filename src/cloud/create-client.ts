@@ -15,5 +15,5 @@ export function createCloudClient(config: ValidatedConfig,directory: string,log:
     log.info('Scan Tuya authorization QR with Smart Life/Tuya Smart within 3 minutes. QR saved to ' + file);
     log.info(await QRCode.toString(payload,{type:'terminal',small:true}));
   });
-  return new ModernCloudClient(backend,message=>log.warn(message),config.energyCounters);
+  return new ModernCloudClient(backend,message=>log.warn(message),config.energyCounters,config.lightTemperatureRanges);
 }

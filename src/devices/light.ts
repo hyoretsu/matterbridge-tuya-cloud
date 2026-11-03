@@ -17,12 +17,13 @@ export function lightCapabilities(device: TuyaDevice) {
 export function configureLight(endpoint: MatterbridgeEndpoint, controller: DeviceController, device: TuyaDevice): (state: DeviceState) => Promise<void> {
   const capabilities = lightCapabilities(device);
   if ((capabilities.color || capabilities.temperature || device.dev_type === 'dimmer') && !capabilities.brightness) throw new UnsupportedDeviceError(`Light ${device.id}: Matter light type requires brightness capability`);
+  function immediate(request:{transitionTime?:number|null}) {if(request.transitionTime!==undefined&&request.transitionTime!==null&&request.transitionTime!==0)unsupported('Cloud light transitions unavailable');}
   function brightnessRange(state: DeviceState) {
-    const colorBrightness = state.color?.brightness !== undefined && (state.color_mode === 'color' || state.color_mode === 'colour');
-    return { colorBrightness, min: numeric(device.config?.min_brightness) ?? (colorBrightness ? 1 : 10), max: numeric(device.config?.max_brightness) ?? (colorBrightness ? 255 : 100) };
+    const colorBrightness = state.color?.brightness !== undefined && (state.color_mode === 'color' || state.color_mode === 'colour' || (device.lightRanges?.colorBrightness !== undefined && device.lightRanges.whiteBrightness === undefined));
+    return { colorBrightness, min: numeric(device.config?.min_brightness) ?? (colorBrightness ? device.lightRanges?.colorBrightness?.min ?? 1 : device.lightRanges?.whiteBrightness?.min ?? 10), max: numeric(device.config?.max_brightness) ?? (colorBrightness ? device.lightRanges?.colorBrightness?.max ?? 255 : device.lightRanges?.whiteBrightness?.max ?? 100) };
   }
-  const minKelvin = numeric(device.config?.min_kelvin) ?? 2000;
-  const maxKelvin = numeric(device.config?.max_kelvin) ?? 7142;
+  const minKelvin = numeric(device.config?.min_kelvin) ?? device.lightRanges?.kelvin?.min ?? 2000;
+  const maxKelvin = numeric(device.config?.max_kelvin) ?? device.lightRanges?.kelvin?.max ?? 7142;
   const minMired = Math.ceil(1000000 / maxKelvin);
   const maxMired = Math.floor(1000000 / minKelvin);
   if (capabilities.brightness) {
@@ -30,12 +31,12 @@ export function configureLight(endpoint: MatterbridgeEndpoint, controller: Devic
     const setLevel = async (level: number, withOnOff: boolean) => matterCommand(async () => {
       const { min, max, colorBrightness } = brightnessRange(controller.state);
       const value = scale(level, 1, 254, min, max);
-      await controller.command('brightnessSet', { value }, colorBrightness ? { color: { ...controller.state.color, brightness: String(value) } } : { brightness: value });
-      if (withOnOff) await controller.command('turnOnOff', { value: level === 0 ? 0 : 1 }, { state: level !== 0 });
+      await controller.command('brightnessSet', { value, ...(device.lightRanges ? {level} : {}), ...(withOnOff ? {onOff: level === 0 ? 0 as const : 1 as const} : {}) }, { ...(colorBrightness ? { color: { ...controller.state.color, brightness: String(value) } } : { brightness: value }), ...(withOnOff ? {state:level !== 0} : {}) });
     });
-    endpoint.addCommandHandler('LevelControl.moveToLevel', async ({ request }) => setLevel(request.level, false));
-    endpoint.addCommandHandler('LevelControl.moveToLevelWithOnOff', async ({ request }) => setLevel(request.level, true));
+    endpoint.addCommandHandler('LevelControl.moveToLevel', async ({ request }) => {immediate(request);await setLevel(request.level,false);});
+    endpoint.addCommandHandler('LevelControl.moveToLevelWithOnOff', async ({ request }) => {immediate(request);await setLevel(request.level,true);});
     endpoint.addCommandHandler('LevelControl.step', async ({ request }) => {
+      immediate(request);
       const { min, max, colorBrightness } = brightnessRange(controller.state);
       const current = numeric(colorBrightness ? controller.state.color?.brightness : controller.state.brightness);
       if (current === undefined) unsupported('Brightness unknown');
@@ -57,17 +58,18 @@ export function configureLight(endpoint: MatterbridgeEndpoint, controller: Devic
     });
     async function writeColor(hue?: number, saturation?: number) {
       const previous = controller.state.color ?? {};
-      const color = { hue: hue === undefined ? numeric(previous.hue) ?? 0 : scale(hue, 0, 254, 0, 360), saturation: saturation === undefined ? numeric(previous.saturation) ?? 0 : scale(saturation, 0, 254, 0, 100), brightness: numeric(previous.brightness) ?? 255 };
-      await matterCommand(() => controller.command('colorSet', { color: { ...color, saturation: color.saturation / 100 } }, { color: { hue: String(color.hue), saturation: String(color.saturation), brightness: String(color.brightness) }, color_mode: 'colour' }));
+      const color = { hue: hue === undefined ? numeric(previous.hue) ?? 0 : scale(hue, 0, 254, 0, 360), saturation: saturation === undefined ? numeric(previous.saturation) ?? 0 : scale(saturation, 0, 254, 0, 100), brightness: numeric(previous.brightness) ?? device.lightRanges?.colorBrightness?.max ?? 255 };
+      await matterCommand(() => controller.command('colorSet', { color: device.lightRanges ? {...(hue===undefined?{}:{hue:color.hue}),...(saturation===undefined?{}:{saturation:color.saturation/100})} : { ...color, saturation: color.saturation / 100 } }, { color: { hue: String(color.hue), saturation: String(color.saturation), brightness: String(color.brightness) }, color_mode: 'colour' }));
     }
     if (capabilities.color) {
-      endpoint.addCommandHandler('ColorControl.moveToHue', async ({ request }) => writeColor(request.hue));
-      endpoint.addCommandHandler('ColorControl.moveToSaturation', async ({ request }) => writeColor(undefined, request.saturation));
-      endpoint.addCommandHandler('ColorControl.moveToHueAndSaturation', async ({ request }) => writeColor(request.hue, request.saturation));
+      endpoint.addCommandHandler('ColorControl.moveToHue', async ({ request }) => {immediate(request);await writeColor(request.hue);});
+      endpoint.addCommandHandler('ColorControl.moveToSaturation', async ({ request }) => {immediate(request);await writeColor(undefined,request.saturation);});
+      endpoint.addCommandHandler('ColorControl.moveToHueAndSaturation', async ({ request }) => {immediate(request);await writeColor(request.hue,request.saturation);});
       for (const command of ['ColorControl.moveHue', 'ColorControl.stepHue', 'ColorControl.moveSaturation', 'ColorControl.stepSaturation'] as const) endpoint.addCommandHandler(command, async () => unsupported('Continuous color movement unavailable'));
     }
     if (capabilities.temperature) {
       endpoint.addCommandHandler('ColorControl.moveToColorTemperature', async ({ request }) => {
+        immediate(request);
         const value = Math.min(maxKelvin, Math.max(minKelvin, Math.round(1000000 / request.colorTemperatureMireds)));
         await matterCommand(() => controller.command('colorTemperatureSet', { value }, { color_temp: value, color_mode: 'white' }));
       });

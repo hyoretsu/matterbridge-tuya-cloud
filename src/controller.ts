@@ -38,9 +38,9 @@ export class DeviceController {
 
   command<Method extends TuyaApiMethod>(method: Method, payload: TuyaApiPayload<Method>, patch: DeviceState = {}): Promise<void> {
     return this.serialize(async () => {
-      await this.api.setDeviceState(this.device.id, method, payload);
+      const committed = await this.api.setDeviceState(this.device.id, method, payload);
       this.assertActive();
-      this.update(patch);
+      this.update({ ...patch, ...(committed ?? {}) });
     });
   }
 

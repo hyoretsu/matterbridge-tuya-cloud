@@ -1,0 +1,4 @@
+import type {CloudDevice,CloudSpecification} from '../../src/cloud/types.js';
+export const light:CloudDevice={id:'light-a',name:'Bedroom',category:'dj',online:true,status:[{code:'switch_led',value:false},{code:'bright_value_v2',value:500},{code:'work_mode',value:'white'},{code:'colour_data_v2',value:JSON.stringify({h:120,s:500,v:700})},{code:'temp_value_v2',value:0}]};
+export const lightSpec:CloudSpecification={functions:[{code:'switch_led',type:'Boolean',values:{}},{code:'bright_value_v2',type:'Integer',values:{min:10,max:1000,step:10,scale:0,unit:''}},{code:'work_mode',type:'Enum',values:{range:['white','colour','scene','music']}},{code:'colour_data_v2',type:'Json',values:{}},{code:'temp_value_v2',type:'Integer',values:{min:0,max:1000,step:1,scale:0,unit:''}}],status:[]};
+export const kelvinRange={id:'light-a',minKelvin:2700,maxKelvin:6500};
