@@ -3,7 +3,7 @@ import { applyDeviceConfiguration, validateConfig, type TuyaWebConfig } from "./
 import type { TuyaDevice } from "./api/response.js";
 import schema from "../matterbridge-tuya-cloud.schema.json";
 import defaults from "../matterbridge-tuya-cloud.config.json";
-const config: TuyaWebConfig = { name: "matterbridge-tuya-cloud", options: { userCode: "fixture" } };
+const config: TuyaWebConfig = { name: "matterbridge-tuya-cloud", options: { userCodeAuth: { userCode: "fixture" } } };
 const devices: TuyaDevice[] = [
   { id: "a", name: "Lamp", dev_type: "light", ha_type: "light", data: { brightness: 0 } },
   { id: "b", name: "Evening", dev_type: "scene", ha_type: "scene", data: {} },
@@ -11,17 +11,19 @@ const devices: TuyaDevice[] = [
 describe("configuration", () => {
   test("schema and config defaults agree with runtime defaults", () => {
     const validated = validateConfig(config);
-    for (const key of ["authMode", "pollingInterval", "statePollingInterval"] as const) {
-      expect(validated.options[key]).toBe(defaults.options[key]);
-      expect(schema.properties.options.properties[key].default).toBe(defaults.options[key]);
+    expect(validated.options.authMode).toBe(defaults.options.authMode);
+    expect(schema.properties.options.properties.authMode.default).toBe(defaults.options.authMode);
+    for (const key of ["pollingInterval", "statePollingInterval"] as const) {
+      expect(validated.options[key]).toBe(defaults.options.polling[key]);
+      expect(schema.properties.options.properties.polling.properties[key].default).toBe(defaults.options.polling[key]);
     }
     expect(validated.scenes).toBe(defaults.scenes);
   });
   test("requires credentials and rejects unsafe polling", () => {
     expect(() => validateConfig(defaults)).toThrow("userCode");
-    for (const pollingInterval of [0, 600, NaN, Infinity]) expect(() => validateConfig({ ...config, options: { ...config.options, pollingInterval } })).toThrow("615");
-    expect(() => validateConfig({ ...config, options: { ...config.options, statePollingInterval: 64 } })).toThrow("65");
-    expect(validateConfig({ ...config, options: { ...config.options, statePollingInterval: 0 } }).options.statePollingInterval).toBe(0);
+    for (const pollingInterval of [0, 600, NaN, Infinity]) expect(() => validateConfig({ ...config, options: { ...config.options, polling: { pollingInterval } } })).toThrow("615");
+    expect(() => validateConfig({ ...config, options: { ...config.options, polling: { statePollingInterval: 64 } } })).toThrow("65");
+    expect(validateConfig({ ...config, options: { ...config.options, polling: { statePollingInterval: 0 } } }).options.statePollingInterval).toBe(0);
   });
   test("overrides preserve zero and leave inputs untouched across retries", () => {
     const settings: TuyaWebConfig = { ...config, defaults: [{ id: "Lamp", device_type: "dimmer", min_brightness: 0, max_brightness: 1000 }] };
@@ -46,9 +48,9 @@ describe("configuration", () => {
 
 test('modern auth defaults to User Code and validates developer fields independently',()=>{
   expect(validateConfig(config).options.authMode).toBe('userCode');
-  expect(()=>validateConfig({name:'matterbridge-tuya-cloud',options:{authMode:'developer',accessId:'id'}})).toThrow('accessSecret');
-  expect(validateConfig({name:'matterbridge-tuya-cloud',options:{authMode:'developer',accessId:'id',accessSecret:'secret',region:'eu'}}).options.region).toBe('eu');
-  expect(()=>validateConfig({name:'matterbridge-tuya-cloud',options:{userCode:'code',region:'invalid' as never}})).toThrow('region');
+  expect(()=>validateConfig({name:'matterbridge-tuya-cloud',options:{authMode:'developer',developer:{accessId:'id'}}})).toThrow('accessSecret');
+  expect(validateConfig({name:'matterbridge-tuya-cloud',options:{authMode:'developer',developer:{accessId:'id',accessSecret:'secret',region:'eu'}}}).options.region).toBe('eu');
+  expect(()=>validateConfig({name:'matterbridge-tuya-cloud',options:{userCodeAuth:{userCode:'code'},developer:{region:'invalid' as never}}})).toThrow('region');
 });
 
 test('light Kelvin bounds require finite increasing manufacturer ranges',()=>{

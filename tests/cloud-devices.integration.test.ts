@@ -31,7 +31,7 @@ const transport:CloudTransport=async(url,init)=>{
 beforeAll(async()=>{
   await setupTest('TuyaCloudDeviceIntegration');const env=await createTestEnvironment();env.set(Network,new NetworkSimulator().addHost(1));await createServerNode(0);
   const cloud=new ModernCloudClient(new OpenApi({accessId:'id',accessSecret:'secret',region:'eu'},transport),()=>{},[],[kelvinRange]);
-  platform=new TuyaPlatform(getMatterbridge(),new AnsiLogger({logName:'TuyaCloud'}),{name:'matterbridge-tuya-cloud',type:'DynamicPlatform',version:'0.1.0',debug:false,unregisterOnShutdown:true,options:{userCode:'fixture',statePollingInterval:0}},()=>cloud);
+  platform=new TuyaPlatform(getMatterbridge(),new AnsiLogger({logName:'TuyaCloud'}),{name:'matterbridge-tuya-cloud',type:'DynamicPlatform',version:'0.1.0',debug:false,unregisterOnShutdown:true,options:{userCodeAuth:{userCode:'fixture'},polling:{statePollingInterval:0}}},()=>cloud);
   addMatterbridge(platform);await platform.onStart();await platform.onConfigure();
 },60000);
 afterAll(async()=>{await platform?.onShutdown();await server?.close();await destroyTestEnvironment();resetTest();});

@@ -67,11 +67,15 @@ Create a cloud project on Tuya Developer Platform, link your Smart Life/Tuya acc
   "type": "DynamicPlatform",
   "options": {
     "authMode": "developer",
-    "accessId": "YOUR_ACCESS_ID",
-    "accessSecret": "YOUR_ACCESS_SECRET",
-    "region": "us",
-    "pollingInterval": 615,
-    "statePollingInterval": 65
+    "developer": {
+      "accessId": "YOUR_ACCESS_ID",
+      "accessSecret": "YOUR_ACCESS_SECRET",
+      "region": "us"
+    },
+    "polling": {
+      "pollingInterval": 615,
+      "statePollingInterval": 65
+    }
   }
 }
 ```

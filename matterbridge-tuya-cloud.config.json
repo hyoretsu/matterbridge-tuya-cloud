@@ -5,10 +5,16 @@
   "unregisterOnShutdown": false,
   "options": {
     "authMode": "userCode",
-    "userCode": "",
-    "region": "us",
-    "pollingInterval": 615,
-    "statePollingInterval": 65
+    "userCodeAuth": {
+      "userCode": ""
+    },
+    "developer": {
+      "region": "us"
+    },
+    "polling": {
+      "pollingInterval": 615,
+      "statePollingInterval": 65
+    }
   },
   "defaults": [],
   "hiddenAccessories": [],

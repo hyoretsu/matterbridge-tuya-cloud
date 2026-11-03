@@ -14,7 +14,7 @@ import type { PlatformConfig } from 'matterbridge';
 
 const fixture = (type: TuyaDevice['dev_type'], data: TuyaDevice['data'], suffix = ''): TuyaDevice => ({id: `${type}${suffix}`, name: `${type}${suffix}`, dev_type: type, ha_type: 'switch', data: { online: true, ...data }});
 const fixtures = [fixture('switch', {state: false}), fixture('outlet', {state:false,currentMa:788,voltageMv:210000,powerMw:113000,energyMwh:60000}), fixture('dimmer', {state: true, brightness: 10}), fixture('light', {state: true, brightness: 100, color_mode: 'colour', color_temp: 4000, color: {hue: '0', saturation: '0', brightness: '255'}}), fixture('temperature_sensor', {temperature: 0}), fixture('fan', {state: true, speed: 1, speed_level: 3}), fixture('climate', {state: true, current_temperature: 0, temperature: 20, mode: 'hot', min_temper: 0, max_temper: 40}), fixture('cover', {state: CoverState.Stopped, support_stop: true}), fixture('window', {state: CoverState.Opening, support_stop: false}), fixture('scene', {state: false}), {...fixture('mode_select',{selected_mode:0}),setting:{description:'Child lock',modes:[{mode:0,label:'Disabled'},{mode:1,label:'Enabled'}]}}, fixture('garage', {state: CoverState.Stopped})];
-const config: PlatformConfig = {name: 'matterbridge-tuya-cloud', type: 'DynamicPlatform', version: '0.1.0', debug: false, unregisterOnShutdown: true, scenes: true, options: {userCode:'fixture',statePollingInterval: 0}};
+const config: PlatformConfig = {name: 'matterbridge-tuya-cloud', type: 'DynamicPlatform', version: '0.1.0', debug: false, unregisterOnShutdown: true, scenes: true, options: {userCodeAuth:{userCode:'fixture'},polling:{statePollingInterval: 0}}};
 let platform: TuyaPlatform;
 let currentDevices = fixtures;
 let discoveryFailure: Error | undefined;

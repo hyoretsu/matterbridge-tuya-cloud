@@ -26,15 +26,10 @@ export interface TuyaWebConfig {
   unregisterOnShutdown?: boolean;
   options?: {
     authMode?: 'userCode' | 'developer';
-    userCode?: string;
-    sharingClientId?: string;
-    sharingSchema?: string;
-    accessId?: string;
-    accessSecret?: string;
+    userCodeAuth?: { userCode?: string; sharingClientId?: string; sharingSchema?: string };
+    developer?: { accessId?: string; accessSecret?: string; region?: keyof typeof REGIONS };
+    polling?: { pollingInterval?: number; statePollingInterval?: number };
     userId?: string;
-    region?: keyof typeof REGIONS;
-    pollingInterval?: number;
-    statePollingInterval?: number;
   };
   defaults?: Partial<TuyaDeviceDefaults>[];
   hiddenAccessories?: string[];
@@ -60,8 +55,9 @@ export interface ValidatedConfig extends TuyaWebConfig {
 }
 
 export function validateConfig(config: TuyaWebConfig): ValidatedConfig {
-  const options = config.options ?? {};
-  const authMode = options.authMode ?? 'userCode';
+  const { authMode: mode, userCodeAuth = {}, developer = {}, polling = {}, userId } = config.options ?? {};
+  const options = { ...userCodeAuth, ...developer, ...polling };
+  const authMode = mode ?? 'userCode';
   if (authMode !== 'userCode' && authMode !== 'developer') throw new Error('Invalid options.authMode');
   for (const key of authMode === 'userCode' ? ['userCode'] as const : ['accessId','accessSecret'] as const) {
     if (typeof options[key] !== 'string' || !options[key]!.trim()) throw new Error('Missing Tuya options.' + key);
@@ -105,7 +101,7 @@ export function validateConfig(config: TuyaWebConfig): ValidatedConfig {
   if(config.lightTemperatureRanges!==undefined&&(!Array.isArray(config.lightTemperatureRanges)||config.lightTemperatureRanges.some(range=>!range||typeof range.id!=='string'||!range.id.trim()||!Number.isInteger(range.minKelvin)||!Number.isInteger(range.maxKelvin)||range.minKelvin<1000||range.maxKelvin>20000||range.maxKelvin<=range.minKelvin)))throw new Error('lightTemperatureRanges requires id and increasing Kelvin bounds within 1000–20000 K');
   if (config.energyCounters !== undefined && (!Array.isArray(config.energyCounters) || config.energyCounters.some(item => !item || typeof item.id !== 'string' || !item.id.trim() || typeof item.code !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(item.code)))) throw new Error('energyCounters requires device id and verified cumulative datapoint code');
   if (config.unregisterOnShutdown !== undefined && typeof config.unregisterOnShutdown !== "boolean") throw new Error("unregisterOnShutdown must be boolean");
-  return { ...structuredClone(config), scenes: config.scenes ?? false, options: { ...options, authMode, userCode: options.userCode ?? "", accessId: options.accessId ?? "", accessSecret: options.accessSecret ?? "", userId: options.userId ?? "", region, pollingInterval, statePollingInterval } };
+  return { ...structuredClone(config), scenes: config.scenes ?? false, options: { ...options, authMode, userCode: options.userCode ?? "", accessId: options.accessId ?? "", accessSecret: options.accessSecret ?? "", userId: userId ?? "", region, pollingInterval, statePollingInterval } };
 }
 
 /** Clone cloud data before applying settings, so retries never mutate discovery or configuration. */
