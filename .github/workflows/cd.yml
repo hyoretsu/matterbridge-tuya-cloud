@@ -38,20 +38,21 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      contents: read
+      id-token: write
     concurrency:
       group: npm-release-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v6
         with:
-          bun-version: 1.4.3
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
       - uses: actions/download-artifact@v4
         with:
           name: matterbridge-tuya-cloud
           path: artifacts
-      - name: Publish tested tarball to npm
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          test -n "$NPM_CONFIG_TOKEN" || { echo 'Configure NPM_TOKEN with publish permission before releasing.'; exit 1; }
-          bun publish artifacts/*.tgz --access public --tag latest
+      - name: Publish tested tarball to npm with OIDC
+        run: npm publish artifacts/*.tgz --ignore-scripts --access public --tag latest

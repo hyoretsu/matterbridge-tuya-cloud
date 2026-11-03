@@ -4,7 +4,7 @@ Version 0.x tracks incomplete feature development; 1.0.0 is reserved for complet
 
 Experimental Matterbridge plugin for Tuya / Smart Life cloud devices. Current cloud discovery supports smart plugs (Tuya categories cz and pc), plug settings and capability-based lights. This is not a complete LocalTuya replacement: universal IR controllers remain unsupported.
 
-Requires Matterbridge 3.10.13+ and a host-supported Node version (Node 22.13+ baseline). Development and release commands use Bun. The package contains no Matterbridge or @matter dependencies; the host provides them.
+Requires Matterbridge 3.10.13+ and a host-supported Node version (Node 22.13+ baseline). Development, builds and packaging use Bun; CI publication uses npm CLI for OIDC. The package contains no Matterbridge or @matter dependencies; the host provides them.
 
 ## Install
 
@@ -122,12 +122,20 @@ bun run test:package
 
 Tests use mocked cloud HTTP and simulated Matter networking with real endpoints. Neither login mode, physical plug readings, pairing, nor full host/controller restart has been validated on hardware. No live Tuya account requests occur during tests.
 
-The **Build and release plugin** workflow builds/tests pushes to main, pull requests and manual runs. Successful runs provide a downloadable matterbridge-tuya-cloud artifact containing the tested .tgz (30-day retention).
+The **Build and release plugin** workflow ([cd.yml](.github/workflows/cd.yml)) builds/tests pushes to main, pull requests and manual runs. Successful runs provide a downloadable matterbridge-tuya-cloud artifact containing the tested .tgz (30-day retention).
 
-To enable npm releases, configure GitHub Actions secret NPM_TOKEN with publish permission for matterbridge-tuya-cloud. The publication job uses the npm environment, where you can require approval. Bun uses NPM_CONFIG_TOKEN; no npm CLI is used. [Bun publishing documentation](https://bun.sh/docs/pm/cli/publish).
+To enable npm releases, configure a GitHub Actions trusted publisher for matterbridge-tuya-cloud on npm:
+
+- Organization/user: hyoretsu
+- Repository: matterbridge-tuya
+- Workflow filename: cd.yml
+- Environment: npm
+- Allow direct publishing with npm publish.
+
+The publication job uses GitHub-hosted runners, Node 24 and npm CLI with id-token: write permission. No NPM_TOKEN secret is required. Bun still installs dependencies, builds, tests and creates the tarball; npm publishes that same tested artifact with lifecycle scripts disabled. The npm GitHub environment can require approval. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) for account-side setup; repository metadata must match the GitHub repository.
 
 After reviewing and pushing the prepared code yourself, create/push a stable version tag matching package.json (for this release, v0.1.0). Tag pushes build and test first, verify the exact version, then publish that same tarball to npm with latest tag. Branch pushes, pull requests and manual build runs never publish. Only trigger a release after confirming account rights and live compatibility appropriate for your release.
 
-No GitHub push, remote workflow execution or npm publication is performed by local builds/tests. npm authentication was unavailable during implementation, so publication remains pending. Business rules: [docs/business-rules.md](docs/business-rules.md). Execution record: [plans/done/0002-tuya-cloud-plugs.md](plans/done/0002-tuya-cloud-plugs.md).
+No GitHub push, remote workflow execution or npm publication is performed by local builds/tests. Trusted publisher configuration and a successful tag-triggered release remain unverified; publication is pending. Business rules: [docs/business-rules.md](docs/business-rules.md). Execution record: [plans/done/0002-tuya-cloud-plugs.md](plans/done/0002-tuya-cloud-plugs.md).
 
 Original project MIT copyright/license retained. Device-sharing protocol interoperability is based on Tuya's Apache-2.0 SDK; see [NOTICE](NOTICE).
