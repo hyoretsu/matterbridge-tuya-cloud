@@ -4,6 +4,7 @@ import { TuyaDeviceDefaults } from "../config.js";
 export type ExtendedBoolean = boolean | "true" | "false" | "True" | "False";
 
 type TuyaProperties = Partial<{
+  selected_mode: number;
   currentMa: number;
   voltageMv: number;
   powerMw: number;
@@ -42,6 +43,7 @@ export const TuyaDeviceTypes = [
   "fan",
   "garage",
   "light",
+  "mode_select",
   "outlet",
   "scene",
   "switch",
@@ -63,6 +65,7 @@ export const HomeAssistantDeviceTypes = [
 export type HomeAssistantDeviceType = (typeof HomeAssistantDeviceTypes)[number];
 
 export interface TuyaDevice {
+  setting?: {description:string;modes:{mode:number;label:string}[]};
   data: DeviceState;
   name: string;
   id: string;
@@ -105,6 +108,7 @@ export interface DeviceQueryPayload {
 }
 
 export type TuyaApiMethod =
+  | "configurationSet"
   | "brightnessSet"
   | "colorSet"
   | "colorTemperatureSet"
@@ -114,7 +118,9 @@ export type TuyaApiMethod =
   | "turnOnOff"
   | "windSpeedSet";
 export type TuyaApiPayload<Method extends TuyaApiMethod> =
-  Method extends "brightnessSet"
+  Method extends "configurationSet"
+    ? {value:number}
+    : Method extends "brightnessSet"
     ? { value: number }
     : Method extends "colorSet"
       ? { color: { hue: number; saturation: number; brightness: number } }

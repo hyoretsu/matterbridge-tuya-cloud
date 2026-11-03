@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { setupTest, resetTest } from 'matterbridge/test-utils/buntest/setup';
 import { addMatterbridge, createTestEnvironment, createServerNode, destroyTestEnvironment, getMatterbridge, server, aggregator } from 'matterbridge/test-utils/buntest/matter';
 import { AnsiLogger } from 'matterbridge/logger';
-import { OnOff, ElectricalPowerMeasurement, ElectricalEnergyMeasurement, BridgedDeviceBasicInformation, LevelControl, TemperatureMeasurement, ColorControl, FanControl, Thermostat, WindowCovering } from 'matterbridge/matter/clusters';
-import { OnOffServer, WindowCoveringServer, FanControlServer, ThermostatServer } from 'matterbridge/matter/behaviors';
+import { OnOff, ElectricalPowerMeasurement, ElectricalEnergyMeasurement, BridgedDeviceBasicInformation, LevelControl, TemperatureMeasurement, ColorControl, FanControl, Thermostat, WindowCovering, ModeSelect } from 'matterbridge/matter/clusters';
+import { OnOffServer, WindowCoveringServer, FanControlServer, ThermostatServer, ModeSelectServer } from 'matterbridge/matter/behaviors';
 import { Network, NetworkSimulator } from "matterbridge/matter";
 import { TuyaPlatform, type CloudClient } from '../src/platform.js';
 import { buildDevice } from '../src/devices/index.js';
@@ -13,7 +13,7 @@ import { RateLimitError } from '../src/errors/index.js';
 import type { PlatformConfig } from 'matterbridge';
 
 const fixture = (type: TuyaDevice['dev_type'], data: TuyaDevice['data'], suffix = ''): TuyaDevice => ({id: `${type}${suffix}`, name: `${type}${suffix}`, dev_type: type, ha_type: 'switch', data: { online: true, ...data }});
-const fixtures = [fixture('switch', {state: false}), fixture('outlet', {state:false,currentMa:788,voltageMv:210000,powerMw:113000,energyMwh:60000}), fixture('dimmer', {state: true, brightness: 10}), fixture('light', {state: true, brightness: 100, color_mode: 'colour', color_temp: 4000, color: {hue: '0', saturation: '0', brightness: '255'}}), fixture('temperature_sensor', {temperature: 0}), fixture('fan', {state: true, speed: 1, speed_level: 3}), fixture('climate', {state: true, current_temperature: 0, temperature: 20, mode: 'hot', min_temper: 0, max_temper: 40}), fixture('cover', {state: CoverState.Stopped, support_stop: true}), fixture('window', {state: CoverState.Opening, support_stop: false}), fixture('scene', {state: false}), fixture('garage', {state: CoverState.Stopped})];
+const fixtures = [fixture('switch', {state: false}), fixture('outlet', {state:false,currentMa:788,voltageMv:210000,powerMw:113000,energyMwh:60000}), fixture('dimmer', {state: true, brightness: 10}), fixture('light', {state: true, brightness: 100, color_mode: 'colour', color_temp: 4000, color: {hue: '0', saturation: '0', brightness: '255'}}), fixture('temperature_sensor', {temperature: 0}), fixture('fan', {state: true, speed: 1, speed_level: 3}), fixture('climate', {state: true, current_temperature: 0, temperature: 20, mode: 'hot', min_temper: 0, max_temper: 40}), fixture('cover', {state: CoverState.Stopped, support_stop: true}), fixture('window', {state: CoverState.Opening, support_stop: false}), fixture('scene', {state: false}), {...fixture('mode_select',{selected_mode:0}),setting:{description:'Child lock',modes:[{mode:0,label:'Disabled'},{mode:1,label:'Enabled'}]}}, fixture('garage', {state: CoverState.Stopped})];
 const config: PlatformConfig = {name: 'matterbridge-tuya-cloud', type: 'DynamicPlatform', version: '0.1.0', debug: false, unregisterOnShutdown: true, scenes: true, options: {userCode:'fixture',statePollingInterval: 0}};
 let platform: TuyaPlatform;
 let currentDevices = fixtures;
@@ -58,7 +58,7 @@ afterAll(async () => {
 
 describe('real Matter endpoints', () => {
   test('all usable categories register; garage gets explicit unsupported-data diagnostic', () => {
-    expect(platform.devices.size).toBe(10);
+    expect(platform.devices.size).toBe(11);
     expect(platform.devices.has('garage')).toBe(false);
     const garage = fixtures.at(-1)!;
     expect(() => buildDevice(new DeviceController(garage, client), garage)).toThrow('Closure Control');
@@ -89,6 +89,16 @@ describe('real Matter endpoints', () => {
     expect(endpoint.state.electricalPowerMeasurement.activePower).toBe(0);
     expect(endpoint.state.electricalEnergyMeasurement.cumulativeEnergyImported?.energy).toBe(0);
     expect(platform.devices.get('switch')!.binding.endpoint.hasClusterServer(ElectricalPowerMeasurement.id)).toBe(false);
+  });
+  test('configuration modes await cloud, reject unknown modes and roll back failed commands',async()=>{
+    const entry=platform.devices.get('mode_select')!;
+    expect(entry.binding.endpoint.hasClusterServer(OnOff.id)).toBe(false);
+    await entry.binding.endpoint.act(async agent=>{await agent.get(ModeSelectServer).changeToMode({newMode:1});});
+    expect(calls.at(-1)).toEqual({id:'mode_select',method:'configurationSet',payload:{value:1}});expect(entry.binding.endpoint.state.modeSelect.currentMode).toBe(1);
+    commandFailure=new Error('setting denied');try{await expect(entry.binding.endpoint.act(async agent=>{await agent.get(ModeSelectServer).changeToMode({newMode:0});})).rejects.toThrow('setting denied');}finally{commandFailure=undefined;}
+    expect(entry.binding.endpoint.state.modeSelect.currentMode).toBe(1);expect(entry.controller.state.selected_mode).toBe(1);
+    const before=calls.length;await expect(entry.binding.endpoint.act(async agent=>{await agent.get(ModeSelectServer).changeToMode({newMode:99});})).rejects.toThrow('Unsupported');expect(calls.length).toBe(before);
+    await entry.binding.update({selected_mode:0});expect(entry.binding.endpoint.state.modeSelect.currentMode).toBe(0);
   });
   test('real On/Off commands produce payloads; cloud failures preserve controller and Matter state', async () => {
     const entry = platform.devices.get('switch')!;
@@ -179,7 +189,7 @@ describe('real Matter endpoints', () => {
     const identity = platform.devices.get('switch')!.binding.endpoint.uniqueId;
     discoveryFailure = new Error('authentication failed');
     await expect(platform.discoverDevices()).rejects.toThrow('authentication failed');
-    expect(platform.devices.size).toBe(10);
+    expect(platform.devices.size).toBe(11);
     discoveryFailure = undefined;
     currentDevices = [ {...fixtures[0], name: 'Renamed'}, {...fixture('outlet', {state: false}, '-new'), name: 'switch'} ];
     await platform.discoverDevices();

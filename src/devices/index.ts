@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { MatterbridgeEndpoint, electricalSensor, onOffPlugInUnit, onOffLight, dimmableLight, colorTemperatureLight, extendedColorLight, temperatureSensor, fan, thermostat, windowCovering } from 'matterbridge';
+import { MatterbridgeEndpoint, electricalSensor, modeSelect, onOffPlugInUnit, onOffLight, dimmableLight, colorTemperatureLight, extendedColorLight, temperatureSensor, fan, thermostat, windowCovering } from 'matterbridge';
 import { OnOffServer, ScenesManagementServer } from 'matterbridge/matter/behaviors';
 import { BridgedDeviceBasicInformation, OnOff, TemperatureMeasurement } from 'matterbridge/matter/clusters';
 import type { DeviceController } from '../controller.js';
@@ -8,6 +8,7 @@ import { boolean, numeric, matterCommand, unsupported } from './conversions.js';
 import { configureLight, lightCapabilities } from './light.js';
 import { configureCover } from './cover.js';
 import { configureFan } from './fan.js';
+import { configureModeSelect } from './mode-select.js';
 import { configurePlug } from './plug.js';
 import { configureClimate } from './climate.js';
 import { UnsupportedDeviceError, type DeviceBinding } from './types.js';
@@ -25,7 +26,7 @@ export function buildDevice(controller: DeviceController, device: TuyaDevice): D
     throw new UnsupportedDeviceError(`Garage ${device.id}: native Closure Control requires mandatory currentErrorList and closure safety state; Tuya legacy discovery supplies movement only`);
   }
   const capabilities = lightCapabilities(device);
-  const type = device.dev_type === 'light' ? capabilities.color ? extendedColorLight : capabilities.temperature ? colorTemperatureLight : capabilities.brightness ? dimmableLight : onOffLight : device.dev_type === 'dimmer' ? dimmableLight : device.dev_type === 'temperature_sensor' ? temperatureSensor : device.dev_type === 'fan' ? fan : device.dev_type === 'climate' ? thermostat : device.dev_type === 'cover' || device.dev_type === 'window' ? windowCovering : onOffPlugInUnit;
+  const type = device.dev_type === 'mode_select' ? modeSelect : device.dev_type === 'light' ? capabilities.color ? extendedColorLight : capabilities.temperature ? colorTemperatureLight : capabilities.brightness ? dimmableLight : onOffLight : device.dev_type === 'dimmer' ? dimmableLight : device.dev_type === 'temperature_sensor' ? temperatureSensor : device.dev_type === 'fan' ? fan : device.dev_type === 'climate' ? thermostat : device.dev_type === 'cover' || device.dev_type === 'window' ? windowCovering : onOffPlugInUnit;
   const identity = deviceIdentity(device.id);
   const metering = ['currentMa','voltageMv','powerMw','energyMwh'].some(key => device.data[key as keyof DeviceState] !== undefined);
   const endpoint = new MatterbridgeEndpoint(device.dev_type === 'outlet' && metering ? [type,electricalSensor] : type, { id: identity });
@@ -63,6 +64,7 @@ export function buildDevice(controller: DeviceController, device: TuyaDevice): D
       endpoint.addCommandHandler('offWithEffect', async () => matterCommand(() => controller.command('turnOnOff', { value: 0 }, { state: false })));
     }
   }
+  if (device.dev_type === 'mode_select') updateMapping = configureModeSelect(endpoint,controller,device);
   if (device.dev_type === 'outlet') updateMapping = configurePlug(endpoint,device.data);
   if (device.dev_type === 'light' || device.dev_type === 'dimmer') updateMapping = configureLight(endpoint, controller, device);
   if (device.dev_type === 'cover' || device.dev_type === 'window') updateMapping = configureCover(endpoint, controller, device);

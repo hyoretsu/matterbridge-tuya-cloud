@@ -23,8 +23,10 @@ Release correction: user requested v0 while features remain incomplete. Package/
 ## Continued implementation
 
 - [x] Correct developer request-signature LF separators; previous mock duplicated the same literal-escape bug. Add fixed golden-vector regression.
-- [ ] Map supported plug configuration using standard Matter controls; never mislabel configuration as relay power.
+- [x] Map supported plug configuration using standard Matter controls; never mislabel configuration as relay power.
 - [ ] Add modern light datapoints and metadata-based conversions with mocked protocol and real endpoint validation.
 - [ ] Update scope documentation, run build/tests/package acceptance, commit/integrate locally and archive this record again.
 
 Current isolated task worktree: ~/.local/share/worktrees/matterbridge-tuya/cloud-controls, branch feat/cloud-controls. No live cloud requests/writes or remote release authorized for this continuation.
+
+Plug-setting step: added capability-checked Mode Select endpoints for writable Boolean/enum settings, stable enum ordering, failure rollback, per-physical-device serialization and query sharing. Build and 57 tests / 304 assertions passed. Countdown remains unmapped; controller display/hardware not validated.

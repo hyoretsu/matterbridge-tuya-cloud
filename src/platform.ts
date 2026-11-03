@@ -9,7 +9,7 @@ import { RateLimitError } from "./errors/index.js";
 import { buildDevice, deviceIdentity, type DeviceBinding } from "./devices/index.js";
 import { MIN_MATTERBRIDGE_VERSION } from "./settings.js";
 
-export type CloudClient = Pick<ModernCloudClient, "getOrRefreshToken" | "discoverDevices" | "getDeviceState" | "setDeviceState" | "shutdown">;
+export type CloudClient = Pick<ModernCloudClient, "getOrRefreshToken" | "discoverDevices" | "getDeviceState" | "setDeviceState" | "shutdown"> & Partial<Pick<ModernCloudClient,"beginStatePoll"|"endStatePoll">>;
 interface RegisteredDevice {
   controller: DeviceController;
   binding: DeviceBinding;
@@ -124,6 +124,7 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
 
   async pollDeviceStates(): Promise<void> {
     if (!this.running || this.operation) return;
+    this.client?.beginStatePoll?.();
     this.operation = (async () => {
       for (const [id, entry] of this.devices) {
         if (!this.running) break;
@@ -135,7 +136,7 @@ export class TuyaPlatform extends MatterbridgeDynamicPlatform {
         }
       }
     })();
-    try { await this.operation; } finally { this.operation = undefined; }
+    try { await this.operation; } finally { this.client?.endStatePoll?.(); this.operation = undefined; }
   }
 
   private schedule(): void {

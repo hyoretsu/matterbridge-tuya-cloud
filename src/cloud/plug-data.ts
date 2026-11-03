@@ -1,11 +1,11 @@
 import type {DeviceState, TuyaDevice} from '../api/response.js';
 import {object, type CloudDevice, type CloudSpecification} from './types.js';
-export interface PlugChannel { device: CloudDevice; specification: CloudSpecification; code: string; primary: boolean; energyCode?: string; }
+export interface PlugChannel { kind:'plug'; device: CloudDevice; specification: CloudSpecification; code: string; primary: boolean; energyCode?: string; }
 export function plugChannels(device: CloudDevice,specification: CloudSpecification): PlugChannel[] {
   if (!['cz','pc'].includes(device.category)) return [];
   const codes = specification.functions.filter(range => /^switch(?:_[1-9][0-9]*)?$/.test(range.code) && range.type.toLowerCase() === 'boolean').map(range=>range.code).sort();
   const primary = codes.includes('switch_1') ? 'switch_1' : 'switch';
-  return codes.map(code=>({device,specification,code,primary:code===primary}));
+  return codes.map(code=>({kind:'plug',device,specification,code,primary:code===primary}));
 }
 export function plugState(channel: PlugChannel, device = channel.device): DeviceState {
   const points = new Map(device.status.map(point=>[point.code,point.value]));
