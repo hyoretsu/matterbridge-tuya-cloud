@@ -36,9 +36,9 @@ beforeAll(async()=>{
 },60000);
 afterAll(async()=>{await platform?.onShutdown();await server?.close();await destroyTestEnvironment();resetTest();});
 test('modern signed HTTP discovery registers capability-specific real endpoints',()=>{
-  expect(platform.devices.size).toBe(4);const color=platform.devices.get('light-a')!.binding.endpoint;expect(color.hasClusterServer(ColorControl.id)).toBe(true);expect(color.hasClusterServer(LevelControl.id)).toBe(true);expect(color.state.levelControl.currentLevel).toBe(126);expect(color.state.colorControl.colorTemperatureMireds).toBe(370);
+  expect(platform.devices.size).toBe(3);const color=platform.devices.get('light-a')!.binding.endpoint;expect(color.hasClusterServer(ColorControl.id)).toBe(true);expect(color.hasClusterServer(LevelControl.id)).toBe(true);expect(color.state.levelControl.currentLevel).toBe(126);expect(color.state.colorControl.colorTemperatureMireds).toBe(370);
   const simple=platform.devices.get('onoff')!.binding.endpoint;expect(simple.hasClusterServer(OnOff.id)).toBe(true);expect(simple.hasClusterServer(LevelControl.id)).toBe(false);expect(simple.hasClusterServer(ColorControl.id)).toBe(false);
-  expect(platform.devices.get('plug:config:child_lock')!.binding.endpoint.hasClusterServer(OnOff.id)).toBe(false);
+  expect(platform.devices.get('plug')!.children.find(child=>child.id==='plug:config:child_lock')!.binding.endpoint.hasClusterServer(OnOff.id)).toBe(false);
 });
 test('Matter level+power command becomes one quantized cloud batch',async()=>{
   const entry=platform.devices.get('light-a')!;const before=sent.length;
@@ -55,10 +55,10 @@ test('RGB and Kelvin commands reach typed v2 properties; rejected writes retain 
   expect(sent.at(-1)?.properties.work_mode).toBe('white');expect(sent.at(-1)?.properties.temp_value_v2).toBe(605);
 });
 test('settings, on/off-only lights and shared cloud polling work through real endpoints',async()=>{
-  const setting=platform.devices.get('plug:config:child_lock')!;await setting.binding.endpoint.act(async agent=>{await agent.get(ModeSelectServer).changeToMode({newMode:1});});expect(sent.at(-1)).toEqual({id:'plug',properties:{child_lock:true}});
+  const setting=platform.devices.get('plug')!.children.find(child=>child.id==='plug:config:child_lock')!;await setting.binding.endpoint.act(async agent=>{await agent.get(ModeSelectServer).changeToMode({newMode:1});});expect(sent.at(-1)).toEqual({id:'plug',properties:{child_lock:true}});
   const simple=platform.devices.get('onoff')!;await simple.binding.endpoint.act(async agent=>{await agent.get(OnOffServer).on();});expect(sent.at(-1)).toEqual({id:'onoff',properties:{switch_led:true}});
   await simple.binding.endpoint.act(async agent=>{await agent.get(OnOffServer).toggle();});await simple.updates;expect(simple.controller.state.state).toBe(false);expect(simple.binding.endpoint.state.onOff.onOff).toBe(false);
-  queries=0;sources.find(device=>device.id==='plug')!.online=false;await platform.pollDeviceStates();expect(queries).toBe(3);expect(setting.binding.endpoint.state.bridgedDeviceBasicInformation.reachable).toBe(false);expect(platform.devices.get('plug')!.binding.endpoint.state.bridgedDeviceBasicInformation.reachable).toBe(false);
+  queries=0;sources.find(device=>device.id==='plug')!.online=false;await platform.pollDeviceStates();expect(queries).toBe(3);expect(platform.devices.get('plug')!.binding.endpoint.state.bridgedDeviceBasicInformation.reachable).toBe(false);
 });
 
 test('unsupported light transitions do not send cloud commands',async()=>{
