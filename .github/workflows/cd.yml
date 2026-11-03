@@ -88,4 +88,4 @@ jobs:
           name: matterbridge-tuya-cloud
           path: artifacts
       - name: Publish tested tarball to npm with OIDC
-        run: npm publish artifacts/*.tgz --ignore-scripts --access public --tag latest
+        run: npm publish ./artifacts/*.tgz --ignore-scripts --access public --tag latest
