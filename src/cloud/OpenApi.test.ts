@@ -1,6 +1,6 @@
 import {test,expect} from 'bun:test';
 import {createHmac,createHash} from 'node:crypto';
-import {OpenApi} from './OpenApi.js';
+import {OpenApi,openApiSignature} from './OpenApi.js';
 import {HttpClient} from './HttpClient.js';
 import {RateLimitError} from '../errors/index.js';
 import type {CloudTransport} from './types.js';
@@ -12,7 +12,7 @@ test('OpenAPI signs token, GET and command body; shares concurrent token request
     calls.push({url,init});const headers=init.headers as Record<string,string>;const method=init.method!;const body=String(init.body??'');
     const path=url.slice('https://openapi.tuyaeu.com'.length);
     const content=createHash('sha256').update(body).digest('hex');
-    const signed=options.accessId+(headers.access_token??'')+headers.t+method+'\n'+content+'\n\n'+path;
+    const signed=options.accessId+(headers.access_token??'')+headers.t+[method,content,'',path].join(String.fromCharCode(10));
     expect(headers.sign).toBe(createHmac('sha256',options.accessSecret).update(signed).digest('hex').toUpperCase());
     if(path.startsWith('/v1.0/token')){expect(headers.access_token).toBeUndefined();return reply({access_token:'token',expire_time:7200});}
     expect(headers.access_token).toBe('token');
@@ -49,4 +49,8 @@ test('IoT Core v2 project pagination, model metadata and shadow readings',async(
   const devices=await client.devices();expect(devices.length).toBe(20);expect(devices[0]!.status[0]).toEqual({code:'switch_1',value:false});expect(paths.filter(path=>path==='/v2.0/cloud/thing/device').length).toBe(2);
   const specs=await client.specification('id0');expect(specs.functions.map(p=>p.code)).toEqual(['switch_1']);expect(specs.status[1]!.values).toEqual({type:'value',scale:1,unit:'W'});
   expect((await client.device('id0')).online).toBe(false);client.shutdown();
+});
+
+test('developer signature golden vector uses actual LF separators',()=>{
+  expect(openApiSignature('fixture-client','fixture-secret','','1700000000000','GET','/v1.0/token?grant_type=1','')).toBe('501D86B7A74F9A45392E38A3D5F1E965ECB8D136FE4A57CD65696228E6DE86B6');
 });

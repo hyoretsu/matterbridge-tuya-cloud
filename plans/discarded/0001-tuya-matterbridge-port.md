@@ -1,6 +1,6 @@
 # Port Tuya Web to Matterbridge
 
-Status: superseded by [modern cloud plug work](../done/0002-tuya-cloud-plugs.md). Previous local-completion claim overstated production acceptance; timer/backoff scheduling, full persisted restart and hardware coverage were incomplete. Garage remains unavailable because legacy Tuya data lacks mandatory closure error/safety state. Hardware acceptance outstanding for every category.
+Status: superseded by [modern cloud plug work](../0002-tuya-cloud-plugs.md). Previous local-completion claim overstated production acceptance; timer/backoff scheduling, full persisted restart and hardware coverage were incomplete. Garage remains unavailable because legacy Tuya data lacks mandatory closure error/safety state. Hardware acceptance outstanding for every category.
 
 ## Approved scope
 

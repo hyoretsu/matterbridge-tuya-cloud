@@ -115,6 +115,6 @@ To enable npm releases, configure GitHub Actions secret NPM_TOKEN with publish p
 
 After reviewing and pushing the prepared code yourself, create/push a stable version tag matching package.json (for this release, v0.1.0). Tag pushes build and test first, verify the exact version, then publish that same tarball to npm with latest tag. Branch pushes, pull requests and manual build runs never publish. Only trigger a release after confirming account rights and live compatibility appropriate for your release.
 
-No GitHub push, remote workflow execution or npm publication is performed by local builds/tests. npm authentication was unavailable during implementation, so publication remains pending. Business rules: [docs/business-rules.md](docs/business-rules.md). Execution record: [plans/done/0002-tuya-cloud-plugs.md](plans/0002-tuya-cloud-plugs.md).
+No GitHub push, remote workflow execution or npm publication is performed by local builds/tests. npm authentication was unavailable during implementation, so publication remains pending. Business rules: [docs/business-rules.md](docs/business-rules.md). Execution record: [plans/0002-tuya-cloud-plugs.md](plans/0002-tuya-cloud-plugs.md).
 
 Original project MIT copyright/license retained. Device-sharing protocol interoperability is based on Tuya's Apache-2.0 SDK; see [NOTICE](NOTICE).

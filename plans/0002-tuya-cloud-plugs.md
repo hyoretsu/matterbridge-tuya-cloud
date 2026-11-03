@@ -1,6 +1,6 @@
 # Tuya Cloud plug-first implementation
 
-Status: code complete; npm publication and live validation pending. Supersedes [legacy cloud port](../discarded/0001-tuya-matterbridge-port.md).
+Status: reopened for continued cloud device implementation. Initial plug release code complete; npm publication and live validation pending. Supersedes [legacy cloud port](discarded/0001-tuya-matterbridge-port.md).
 
 User scope: rename package to matterbridge-tuya-cloud; npm release with proper version bump; current Tuya cloud APIs; both User Code/QR (default) and developer credentials; plugs first, including electrical readings shown in screenshot. No pushes/remote CI or live account/device tests performed.
 
@@ -19,3 +19,12 @@ Validation so far: 49 full-suite fixture tests passed before final energy/auth r
 Pending developer validation: actual Tuya QR acceptance for standalone public sharing client, developer-project permissions, physical switch/meters, Node/full Matterbridge loader, pairing/controller UI, persisted host restart, polling cadence/backoff and complete resource audit. No claim of production readiness. npm publication pending authentication (local whoami 401), configured NPM_TOKEN and user push/tag; no remote release performed.
 
 Release correction: user requested v0 while features remain incomplete. Package/runtime/test metadata and release instructions now use 0.1.0; 1.0.0 reserved for completed feature coverage. npm authentication rechecked: 401 Unauthorized; no publication performed.
+
+## Continued implementation
+
+- [x] Correct developer request-signature LF separators; previous mock duplicated the same literal-escape bug. Add fixed golden-vector regression.
+- [ ] Map supported plug configuration using standard Matter controls; never mislabel configuration as relay power.
+- [ ] Add modern light datapoints and metadata-based conversions with mocked protocol and real endpoint validation.
+- [ ] Update scope documentation, run build/tests/package acceptance, commit/integrate locally and archive this record again.
+
+Current isolated task worktree: ~/.local/share/worktrees/matterbridge-tuya/cloud-controls, branch feat/cloud-controls. No live cloud requests/writes or remote release authorized for this continuation.

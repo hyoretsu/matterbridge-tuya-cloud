@@ -4,7 +4,7 @@ import {cloudDevice, cloudSpecification, list, object, type CloudBackend, type C
 export const REGIONS = {us: 'https://openapi.tuyaus.com', usEast: 'https://openapi-ueaz.tuyaus.com', eu: 'https://openapi.tuyaeu.com', euWest: 'https://openapi-weaz.tuyaeu.com', cn: 'https://openapi.tuyacn.com', in: 'https://openapi.tuyain.com', sg: 'https://openapi-sg.iotbing.com'} as const;
 export interface OpenApiOptions { accessId: string; accessSecret: string; region: keyof typeof REGIONS; }
 export function openApiSignature(id: string, secret: string, token: string, time: string, method: string, path: string, body: string): string {
-  const stringToSign = method + '\n' + createHash('sha256').update(body).digest('hex') + '\n\n' + path;
+  const stringToSign = [method, createHash('sha256').update(body).digest('hex'), '', path].join(String.fromCharCode(10));
   return createHmac('sha256', secret).update(id + token + time + stringToSign).digest('hex').toUpperCase();
 }
 export class OpenApi implements CloudBackend {
