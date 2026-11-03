@@ -2,7 +2,6 @@ name: Build and release plugin
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -10,14 +9,29 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      bumped: ${{ steps.version.outputs.bumped }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
-      - name: Verify release version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: bun tools/verify-release.ts
+      - name: Resolve release version
+        id: version
+        if: github.event_name == 'push'
+        run: |
+          current=$(node -p "require('./package.json').version")
+          if git rev-parse -q --verify "refs/tags/v$current" >/dev/null; then
+            npm version patch --no-git-tag-version >/dev/null
+            echo "bumped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - run: bun install --frozen-lockfile
       - run: mkdir -p .sdk && cp tools/sdk.package.json .sdk/package.json
       - run: bun install --cwd .sdk --ignore-scripts
@@ -34,17 +48,31 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   publish:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     environment: npm
     permissions:
-      contents: read
+      contents: write
       id-token: write
     concurrency:
       group: npm-release-${{ github.ref }}
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v4
+      - name: Commit version and tag release
+        env:
+          BUMPED: ${{ needs.build.outputs.bumped }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$BUMPED" = "true" ]; then
+            npm version "$VERSION" --no-git-tag-version >/dev/null
+            git commit -am "chore(matterbridge-tuya-cloud): release v$VERSION [skip ci]"
+          fi
+          git tag "v$VERSION"
+          git push origin HEAD:main "v$VERSION"
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
